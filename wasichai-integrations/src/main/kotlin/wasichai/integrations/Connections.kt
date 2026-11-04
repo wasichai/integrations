@@ -66,7 +66,8 @@ class ConnectionRepository(
 ) {
     private val m = schemas.metadata
     private val columns =
-        "id, organization_id, connector_id, name, provider_account_id, display_name, status, auth_type, scopes, metadata, health, " +
+        "id, organization_id, connector_id, name, provider_account_id, display_name, status, auth_type, " +
+            "scopes::text AS scopes, metadata::text AS metadata, health, " +
             "last_validated_at, last_error, version, created_at, updated_at"
 
     suspend fun list(organizationId: UUID): List<Connection> =

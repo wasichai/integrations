@@ -185,7 +185,8 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
         runBlocking {
             db
                 .sql(
-                    "UPDATE ${schemas.metadata}.integration_connection_credentials SET access_expires_at = now() - interval '1 minute' WHERE connection_id = :id"
+                    "UPDATE ${schemas.metadata}.integration_connection_credentials " +
+                        "SET access_expires_at = now() - interval '1 minute' WHERE connection_id = :id"
                 ).bind("id", id)
                 .fetch()
                 .rowsUpdated()
