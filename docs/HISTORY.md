@@ -2,6 +2,15 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Releases: release-please, Maven publishing behind a guard, integrations-bom
+
+One version for every module through release-please on `gradle.properties`; a published release runs `publish.yml`,
+which first publishes to a throwaway local repository and checks the exact artifact set, then publishes to GitHub
+Packages ([#36](https://github.com/wasichai/integrations/issues/36),
+[#49](https://github.com/wasichai/integrations/pull/49)). `integrations-bom` aligns the modules on top of
+`wasichai-bom`. Every pull request runs the same guard as "Publish dry run (Maven)". See
+`docs/development/releasing.md`. REST change: none. New tests: the publication guard in CI.
+
 ## 2026-11-04 — Checked provider addresses are pinned; rate limit test on virtual time
 
 Provider calls now resolve names through a guarded Netty resolver: lookups run off the event loop, every returned
