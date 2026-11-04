@@ -15,6 +15,7 @@ import java.util.UUID
         "wasichai.integrations.encryption.active-key=it1",
         // tests drive the job runner themselves
         "wasichai.integrations.jobs.worker-enabled=false",
+        "wasichai.integrations.sync.scheduler-enabled=false",
         "wasichai.integrations.jobs.backoff=1ms",
         "wasichai.integrations.jobs.max-backoff=1ms"
     ]

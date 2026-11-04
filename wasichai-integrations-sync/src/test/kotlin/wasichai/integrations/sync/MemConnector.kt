@@ -99,6 +99,29 @@ class MemConnector(
         table(connection, resource)[id] = Stored(id, old.fields, old.version + 1, Instant.now(), seq.incrementAndGet(), deleted = true)
     }
 
+    // edits behind the feed's back: the record changes or goes, and no change entry says so (what a reconcile must find)
+    fun silentPut(
+        connection: String,
+        resource: String,
+        id: String,
+        fields: Map<String, FieldValue>
+    ) {
+        val old = table(connection, resource)[id] ?: return
+        table(connection, resource)[id] = Stored(id, old.fields + fields, old.version + 1, Instant.now(), old.seq)
+    }
+
+    fun vanish(
+        connection: String,
+        resource: String,
+        id: String
+    ) {
+        table(connection, resource).remove(id)
+    }
+
+    // a checkpoint the provider no longer accepts (like an expired delta token): changes() refuses any checkpoint
+    @Volatile
+    var refuseCheckpoints = false
+
     fun records(
         connection: String,
         resource: String
@@ -146,6 +169,7 @@ class MemConnector(
         checkpoint: String?,
         pageSize: Int
     ): ChangePage {
+        if (checkpoint != null && refuseCheckpoints) throw ConnectorException.Permanent("checkpoint $checkpoint expired")
         val after = checkpoint?.toLong() ?: 0
         val page = table(context.connectionId, resource).values.filter { it.seq > after }.sortedBy { it.seq }
         val taken = page.take(pageSize)

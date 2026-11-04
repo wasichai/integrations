@@ -8,6 +8,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.r2dbc.core.DatabaseClient
 import tools.jackson.databind.json.JsonMapper
+import wasichai.core.platform.ClusterLock
 import wasichai.core.platform.ModuleMigration
 import wasichai.core.platform.WasichaiSchemas
 import wasichai.integrations.ConnectionRepository
@@ -26,6 +27,7 @@ import wasichai.integrations.sync.SyncEngine
 import wasichai.integrations.sync.SyncOperationsController
 import wasichai.integrations.sync.SyncOperationsService
 import wasichai.integrations.sync.SyncRunRepository
+import wasichai.integrations.sync.SyncScheduler
 import wasichai.integrations.sync.SyncStateRepository
 import java.time.Clock
 
@@ -113,4 +115,14 @@ class WasichaiIntegrationsSyncAutoConfiguration {
 
     @Bean
     fun syncOperationsController(operations: SyncOperationsService): SyncOperationsController = SyncOperationsController(operations)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun syncScheduler(
+        runs: SyncRunRepository,
+        engine: SyncEngine,
+        clusterLock: ClusterLock,
+        properties: SyncProperties,
+        clock: Clock
+    ): SyncScheduler = SyncScheduler(runs, engine, clusterLock, properties, clock)
 }
