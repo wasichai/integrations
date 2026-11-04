@@ -1,9 +1,19 @@
 package wasichai.integrations.it
 
 import org.junit.jupiter.api.Test
+import org.springframework.test.context.TestPropertySource
 import wasichai.test.WasichaiIntegrationTest
 
-// the floor every suite stands on: wasichai from the packages boots on postgres 18 and signs in
+// the floor every suite stands on: wasichai from the packages, with the integration modules, boots on postgres 18
+// and signs in. the integrations module refuses to start without an encryption key
+@TestPropertySource(
+    properties = [
+        "wasichai.integrations.encryption.keys.boot1=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+        "wasichai.integrations.encryption.active-key=boot1",
+        "wasichai.integrations.jobs.worker-enabled=false",
+        "wasichai.integrations.sync.scheduler-enabled=false"
+    ]
+)
 class AppBootsTest : WasichaiIntegrationTest() {
     @Test
     fun `health answers and the seeded admin signs in`() {

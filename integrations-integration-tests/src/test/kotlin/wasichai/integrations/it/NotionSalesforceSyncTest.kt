@@ -118,6 +118,8 @@ class NotionSalesforceSyncTest : WasichaiIntegrationTest() {
         // what each side holds before the first run
         sf.addAccount("Acme", "Banking", 120)
         sf.addAccount("Globex", "Energy", 40)
+        // one record per query page: two accounts are enough to walk nextRecordsUrl
+        sf.queryPageSize = 1
         notion.addPage("Initech", "Technology", 15)
         val body =
             mapOf(
@@ -281,7 +283,7 @@ class NotionSalesforceSyncTest : WasichaiIntegrationTest() {
         assertEquals(0, quiet.get("created").asInt() + quiet.get("updated").asInt(), quiet.toString())
         assertEquals(notionWrites, notion.apiWrites.get(), "no echo into notion")
         assertEquals(sfWrites, sf.apiWrites.get(), "no echo into salesforce")
-        // the query paged through nextRecordsUrl (two records per page)
+        // the query paged through nextRecordsUrl (one record per page)
         assertTrue(sf.requests("GET", Regex("/services/data/v66.0/query/01g.+")).isNotEmpty())
     }
 
