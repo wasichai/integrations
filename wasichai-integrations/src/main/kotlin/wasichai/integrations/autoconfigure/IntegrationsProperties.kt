@@ -13,8 +13,14 @@ data class IntegrationsProperties(
     val encryption: Encryption = Encryption(),
     val oauth: OAuth = OAuth(),
     val http: Http = Http(),
-    val jobs: Jobs = Jobs()
+    val jobs: Jobs = Jobs(),
+    val webhooks: Webhooks = Webhooks()
 ) {
+    data class Webhooks(
+        // a bigger delivery is refused before any parsing (413)
+        val maxBodyBytes: Int = 1024 * 1024
+    )
+
     data class Jobs(
         // off on a replica that must only serve the api
         val workerEnabled: Boolean = true,

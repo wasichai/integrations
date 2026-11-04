@@ -28,6 +28,9 @@ import wasichai.integrations.ConnectorContexts
 import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.CredentialCipher
 import wasichai.integrations.CredentialKeyProvider
+import wasichai.integrations.EventJobs
+import wasichai.integrations.EventRepository
+import wasichai.integrations.IntegrationEventListener
 import wasichai.integrations.IntegrationsAccess
 import wasichai.integrations.IntegrationsMeters
 import wasichai.integrations.JobHandler
@@ -44,6 +47,9 @@ import wasichai.integrations.ProviderConfigService
 import wasichai.integrations.RateLimits
 import wasichai.integrations.TokenClient
 import wasichai.integrations.Transactions
+import wasichai.integrations.WebhookController
+import wasichai.integrations.WebhookEndpointRepository
+import wasichai.integrations.WebhookService
 import wasichai.integrations.sdk.Connector
 import java.time.Clock
 
@@ -215,6 +221,49 @@ class WasichaiIntegrationsAutoConfiguration {
 
     @Bean
     fun operationsController(operations: OperationsService): OperationsController = OperationsController(operations)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun eventRepository(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): EventRepository = EventRepository(db, json, schemas)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun webhookEndpointRepository(
+        db: DatabaseClient,
+        schemas: WasichaiSchemas
+    ): WebhookEndpointRepository = WebhookEndpointRepository(db, schemas)
+
+    // a JobHandler bean: the runner picks it up with the others
+    @Bean
+    @ConditionalOnMissingBean
+    fun eventJobs(
+        events: EventRepository,
+        listeners: ObjectProvider<IntegrationEventListener>,
+        clock: Clock
+    ): EventJobs = EventJobs(events, listeners.orderedStream().toList(), clock)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun webhookService(
+        access: IntegrationsAccess,
+        registry: ConnectorRegistry,
+        connections: ConnectionRepository,
+        endpoints: WebhookEndpointRepository,
+        events: EventRepository,
+        jobs: JobRepository,
+        cipher: CredentialCipher,
+        json: JsonMapper,
+        integrationsTransactions: Transactions,
+        properties: IntegrationsProperties,
+        clock: Clock
+    ): WebhookService = WebhookService(access, registry, connections, endpoints, events, jobs, cipher, json, integrationsTransactions, properties, clock)
+
+    @Bean
+    fun webhookController(webhooks: WebhookService): WebhookController = WebhookController(webhooks)
 
     @Bean
     @ConditionalOnMissingBean
