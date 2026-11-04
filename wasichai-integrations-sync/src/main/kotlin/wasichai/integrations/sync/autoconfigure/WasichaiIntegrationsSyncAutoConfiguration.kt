@@ -14,11 +14,19 @@ import wasichai.integrations.ConnectionRepository
 import wasichai.integrations.ConnectorContexts
 import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.IntegrationsAccess
+import wasichai.integrations.IntegrationsMeters
+import wasichai.integrations.JobRepository
+import wasichai.integrations.Transactions
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import wasichai.integrations.sync.DefinitionValidator
 import wasichai.integrations.sync.SyncDefinitionController
 import wasichai.integrations.sync.SyncDefinitionRepository
 import wasichai.integrations.sync.SyncDefinitionService
+import wasichai.integrations.sync.SyncEngine
+import wasichai.integrations.sync.SyncOperationsController
+import wasichai.integrations.sync.SyncOperationsService
+import wasichai.integrations.sync.SyncRunRepository
+import wasichai.integrations.sync.SyncStateRepository
 import java.time.Clock
 
 // synchronization between two connections (ADR-0009). needs the integrations module and its tables.
@@ -58,4 +66,51 @@ class WasichaiIntegrationsSyncAutoConfiguration {
 
     @Bean
     fun syncDefinitionController(definitions: SyncDefinitionService): SyncDefinitionController = SyncDefinitionController(definitions)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun syncStateRepository(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): SyncStateRepository = SyncStateRepository(db, json, schemas)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun syncRunRepository(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): SyncRunRepository = SyncRunRepository(db, json, schemas)
+
+    // a JobHandler and an IntegrationEventListener: the integrations module picks it up as both
+    @Bean
+    @ConditionalOnMissingBean
+    fun syncEngine(
+        definitions: SyncDefinitionRepository,
+        state: SyncStateRepository,
+        runs: SyncRunRepository,
+        registry: ConnectorRegistry,
+        connections: ConnectionRepository,
+        contexts: ConnectorContexts,
+        jobs: JobRepository,
+        integrationsTransactions: Transactions,
+        meters: IntegrationsMeters,
+        properties: SyncProperties,
+        clock: Clock
+    ): SyncEngine = SyncEngine(definitions, state, runs, registry, connections, contexts, jobs, integrationsTransactions, meters, properties, clock)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun syncOperationsService(
+        access: IntegrationsAccess,
+        definitions: SyncDefinitionRepository,
+        state: SyncStateRepository,
+        runs: SyncRunRepository,
+        engine: SyncEngine,
+        clock: Clock
+    ): SyncOperationsService = SyncOperationsService(access, definitions, state, runs, engine, clock)
+
+    @Bean
+    fun syncOperationsController(operations: SyncOperationsService): SyncOperationsController = SyncOperationsController(operations)
 }
