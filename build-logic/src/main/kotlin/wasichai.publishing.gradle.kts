@@ -26,3 +26,9 @@ plugins.withId("java-library") {
         }
     }
 }
+
+plugins.withId("java-platform") {
+    publishing.publications.create<MavenPublication>("maven") {
+        from(components["javaPlatform"])
+    }
+}
