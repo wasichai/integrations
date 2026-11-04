@@ -55,7 +55,8 @@ class ProviderConfigRepository(
     schemas: WasichaiSchemas
 ) {
     private val m = schemas.metadata
-    private val columns = "id, organization_id, connector_id, client_id, client_secret_sealed, scopes, options, version, created_at, updated_at"
+    private val columns =
+        "id, organization_id, connector_id, client_id, client_secret_sealed, scopes::text AS scopes, options::text AS options, version, created_at, updated_at"
 
     suspend fun list(organizationId: UUID): List<ProviderConfig> =
         db
@@ -146,11 +147,11 @@ class ProviderConfigRepository(
         )
 }
 
-// jsonb reads back as io.r2dbc.postgresql.codec.Json; its toString is the json text, and String works too
+// jsonb travels as text, as in wasichai: CAST on the way in, ::text on the way out (select "col::text AS col")
 internal fun jsonText(
     row: io.r2dbc.spi.Readable,
     column: String
-): String = row.get(column)?.let { (it as? String) ?: it.toString() } ?: "null"
+): String = row.get(column, String::class.java) ?: "null"
 
 internal fun DatabaseClient.GenericExecuteSpec.bindNullable(
     name: String,
