@@ -8,7 +8,8 @@ data class SalesforceConfig(
     val apiVersion: String? = null
 ) {
     init {
-        require(loginUrl.startsWith("https://")) { "loginUrl must be https" }
+        // loopback http only for a stub provider in tests, as NotionConfig allows
+        require(loginUrl.startsWith("https://") || loginUrl.startsWith("http://127.0.0.1")) { "loginUrl must be https" }
         require(apiVersion == null || VERSION.matches(apiVersion)) { "apiVersion must look like 66.0" }
     }
 
