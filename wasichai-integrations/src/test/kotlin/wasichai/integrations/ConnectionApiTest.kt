@@ -30,6 +30,9 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
     @Autowired
     private lateinit var schemas: WasichaiSchemas
 
+    @Autowired
+    private lateinit var held: HeldConnections
+
     private val stub = StubProvider.server
     private val tenant by lazy { TestTenant.provision(client).also { configure(it) } }
     private val other by lazy { TestTenant.provision(client) }
@@ -265,8 +268,36 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
         val member = tenant.member()
         call(client, HttpMethod.POST, "/api/integrations/connections/oauth/start", member, mapOf("connectorId" to "stub-oauth"), 403)
         call(client, HttpMethod.DELETE, "/api/integrations/connections/$id", member, null, 403)
+        // a test calls the provider and changes status and health: a manager's action
+        call(client, HttpMethod.POST, "/api/integrations/connections/$id/test", member, null, 403)
         // oauth needs the tenant's own provider app
         call(client, HttpMethod.POST, "/api/integrations/connections/oauth/start", other.admin, mapOf("connectorId" to "stub-oauth"), 409)
+    }
+
+    @Test
+    fun `a connection still in use is not deleted, and nothing is revoked`() {
+        val (id, _) = connect()
+        held.hold(id, "workflow 'Nightly'")
+        try {
+            val refused = call(client, HttpMethod.DELETE, "/api/integrations/connections/$id", tenant.admin, null, 409)
+            assertTrue(refused.get("detail").asString().contains("workflow 'Nightly'"), refused.toString())
+            assertTrue(stub.requests.none { it.path == "/revoke" })
+            call(client, HttpMethod.GET, "/api/integrations/connections/$id", tenant.admin, null, 200)
+        } finally {
+            held.release(id)
+        }
+        call(client, HttpMethod.DELETE, "/api/integrations/connections/$id", tenant.admin, null, 204)
+    }
+
+    @Test
+    fun `a provider app is not deleted while connections use it`() {
+        val t = TestTenant.provision(client).also { configure(it) }
+        val (id, _) = connect(t)
+        call(client, HttpMethod.DELETE, "/api/integrations/provider-configs/stub-oauth", t.admin, null, 409)
+        call(client, HttpMethod.GET, "/api/integrations/provider-configs/stub-oauth", t.admin, null, 200)
+        call(client, HttpMethod.DELETE, "/api/integrations/connections/$id", t.admin, null, 204)
+        call(client, HttpMethod.DELETE, "/api/integrations/provider-configs/stub-oauth", t.admin, null, 204)
+        call(client, HttpMethod.DELETE, "/api/integrations/provider-configs/stub-oauth", t.admin, null, 404)
     }
 
     @Test

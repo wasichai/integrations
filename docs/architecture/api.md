@@ -73,7 +73,7 @@ The tenant's OAuth app at a provider. Every route is **M** (members get `403`, l
 | GET | `/provider-configs` | `200` array of `ProviderConfigView`, by `connectorId` |
 | GET | `/provider-configs/{connectorId}` | `200` `ProviderConfigView` with `ETag`; `404` none |
 | PUT | `/provider-configs/{connectorId}` | create (no `If-Match`) or replace (`If-Match` required) → `200` with `ETag` |
-| DELETE | `/provider-configs/{connectorId}` | `204`; `404` none |
+| DELETE | `/provider-configs/{connectorId}` | `204`; `404` none; `409` while connections to that connector exist |
 
 Request `ProviderConfigRequest`:
 
@@ -97,8 +97,8 @@ replace without `If-Match` or with a stale version, `409` a concurrent create wo
 | GET | `/connections` | R | `200` array of `ConnectionView` |
 | POST | `/connections` | M | `201` `ConnectionView` (API key, basic, client credentials) |
 | GET | `/connections/{id}` | R | `200` `ConnectionView`; `404` |
-| DELETE | `/connections/{id}` | M | `204`; `404` |
-| POST | `/connections/{id}/test` | R | `200` `ConnectionTestView`; `404` |
+| DELETE | `/connections/{id}` | M | `204`; `404`; `409` while something uses it |
+| POST | `/connections/{id}/test` | M | `200` `ConnectionTestView`; `404` |
 | POST | `/connections/oauth/start` | M | `200` `{authorizationUrl, expiresAt}` |
 | GET | `/oauth/callback` | P | `302` to the configured return url |
 
@@ -115,8 +115,10 @@ lastValidatedAt?, lastError?, version, createdAt, updatedAt}`; `status` `ACTIVE 
 `ConnectionTestView`: `{ok, error?, retryable?, connection}`. A failure marks the connection: `AuthExpired` ⇒
 `NEEDS_REAUTH`/`FAILING`, a retryable failure ⇒ `DEGRADED`, any other ⇒ `ERROR`/`FAILING`.
 
-`DELETE` revokes the token at the provider when the connector declares a revoke url (best effort), then deletes. It
-also deletes, by cascade, every sync definition using the connection, with its links, runs and conflicts.
+`DELETE` answers `409` naming what still uses the connection (each sync definition, in any status, with a side on
+it); nothing is revoked or deleted then, so no link, run or open conflict disappears with it. Otherwise it revokes the
+token at the provider when the connector declares a revoke url (best effort), then deletes. `test` is a manager's
+action because it calls the provider and changes the connection's status and health.
 
 ### OAuth
 
@@ -167,7 +169,8 @@ provider failures as mapped above.
 | POST | `/events/{id}/replay` | M | `200` `EventView` (status `RECEIVED` again) |
 
 `WebhookEndpointView`: `{id, connectionId, connectorId, url, status, secretSet, lastDeliveryAt?, createdAt}`; `url` is
-what to register at the provider; `status` `PENDING_VERIFICATION | ACTIVE | DISABLED` (the first accepted delivery makes
+what to register at the provider, `null` when `wasichai.integrations.public-base-url` was removed after the endpoint was
+made; `status` `PENDING_VERIFICATION | ACTIVE | DISABLED` (the first accepted delivery makes
 it `ACTIVE`). `secret` is the signing secret a provider shows at registration; leave it out for handshake providers.
 Create: `404` connection, `400` connector without webhooks, `409` no `public-base-url`. The verification token is the
 one secret the API shows (a provider such as Notion wants it pasted back): `404` until a handshake stored one.

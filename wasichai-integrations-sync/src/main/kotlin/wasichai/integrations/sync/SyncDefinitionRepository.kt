@@ -57,6 +57,22 @@ class SyncDefinitionRepository(
             .collectList()
             .awaitSingle()
 
+    // names of every definition, in any status, with a side on this connection (ConnectionUsage)
+    suspend fun namesOnConnection(
+        organizationId: UUID,
+        connectionId: UUID
+    ): List<String> =
+        db
+            .sql(
+                "SELECT name FROM $m.integration_sync_definitions WHERE organization_id = :org " +
+                    "AND (a_connection_id = :connection OR b_connection_id = :connection) ORDER BY name"
+            ).bind("org", organizationId)
+            .bind("connection", connectionId)
+            .map { row, _ -> row.get("name", String::class.java)!! }
+            .all()
+            .collectList()
+            .awaitSingle()
+
     suspend fun insert(
         definition: SyncDefinition,
         createdBy: UUID

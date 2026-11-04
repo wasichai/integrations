@@ -54,6 +54,17 @@ class SyncDefinitionApiTest : SyncIntegrationTest() {
     }
 
     @Test
+    fun `a connection a definition stands on is not deleted under it`() {
+        val left = tenant.connect("mem-a")
+        val id = call(client, HttpMethod.POST, "/api/integrations/sync-definitions", tenant.admin, body(aConnection = left), 201).get("id").asString()
+        val refused = call(client, HttpMethod.DELETE, "/api/integrations/connections/$left", tenant.admin, null, 409)
+        assertTrue(refused.get("detail").asString().contains("sync definition 'Contacts'"), refused.toString())
+        call(client, HttpMethod.GET, "/api/integrations/sync-definitions/$id", tenant.admin, null, 200)
+        call(client, HttpMethod.DELETE, "/api/integrations/sync-definitions/$id", tenant.admin, null, 204)
+        call(client, HttpMethod.DELETE, "/api/integrations/connections/$left", tenant.admin, null, 204)
+    }
+
+    @Test
     fun `shape problems are 400 naming each field`() {
         val problem =
             call(

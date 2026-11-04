@@ -24,6 +24,7 @@ import wasichai.integrations.ConnectionController
 import wasichai.integrations.ConnectionCredentials
 import wasichai.integrations.ConnectionRepository
 import wasichai.integrations.ConnectionService
+import wasichai.integrations.ConnectionUsage
 import wasichai.integrations.ConnectorContexts
 import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.CredentialCipher
@@ -280,7 +281,8 @@ class WasichaiIntegrationsAutoConfiguration {
         cipher: CredentialCipher,
         integrationsTransactions: Transactions,
         properties: IntegrationsProperties,
-        clock: Clock
+        clock: Clock,
+        usages: ObjectProvider<ConnectionUsage>
     ): ConnectionService =
         ConnectionService(
             access,
@@ -295,7 +297,8 @@ class WasichaiIntegrationsAutoConfiguration {
             cipher,
             integrationsTransactions,
             properties,
-            clock
+            clock,
+            usages.orderedStream().toList()
         )
 
     @Bean

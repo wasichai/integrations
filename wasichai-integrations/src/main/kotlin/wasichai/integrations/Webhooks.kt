@@ -45,8 +45,8 @@ data class WebhookEndpointView(
     val id: UUID,
     val connectionId: UUID,
     val connectorId: String,
-    // what to register at the provider
-    val url: String,
+    // what to register at the provider; null while wasichai.integrations.public-base-url is not set
+    val url: String?,
     val status: EndpointStatus,
     val secretSet: Boolean,
     val lastDeliveryAt: Instant?,
@@ -388,7 +388,7 @@ class WebhookService(
             endpoint.id,
             endpoint.connectionId,
             endpoint.connectorId,
-            properties.publicBaseUrl!!.trimEnd('/') + "/api/integrations/webhooks/${endpoint.connectorId}/${endpoint.id}",
+            properties.publicBaseUrl?.let { it.trimEnd('/') + "/api/integrations/webhooks/${endpoint.connectorId}/${endpoint.id}" },
             endpoint.status,
             endpoint.secretSealed != null,
             endpoint.lastDeliveryAt,
