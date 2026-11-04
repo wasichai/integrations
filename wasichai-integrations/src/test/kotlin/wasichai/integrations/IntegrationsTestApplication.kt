@@ -23,4 +23,10 @@ class IntegrationsTestApplication {
 
     @Bean
     fun recordingJobs(): RecordingJobs = RecordingJobs()
+
+    @Bean
+    fun stubHooks(): Connector = StubHooks()
+
+    @Bean
+    fun recordingListener(): RecordingListener = RecordingListener()
 }
