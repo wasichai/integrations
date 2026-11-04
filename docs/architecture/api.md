@@ -332,11 +332,15 @@ are set for an `ACTIVE` definition with a schedule (now, when it never ran).
 }
 ```
 
-Resolve takes `{choice: A | B | CUSTOM, values?}`; with `CUSTOM`, `values` holds a plain JSON value (or a typed one) for
-every conflicting field, keyed by A's field name. The chosen values are written where the direction allows, the snapshot
+Resolve takes `{choice: A | B | CUSTOM, values?, fields?}`. With `CUSTOM`, each conflicting field is settled by
+`values` (a plain JSON value, or a typed one, keyed by A's field name) or else by `fields` (`"A"` or `"B"` keyed by the
+mapping key, e.g. `{"Industry->Industry": "B"}`). A value taken from B, by `choice: B` or a `fields` pick, goes back
+to A through the mapping's inverse transform (an enum map backwards, a date-time to its day); a pick of B on a
+`static` or `conditional` mapping is refused with a violation on `fields.<key>`, since they have no inverse. The chosen
+values are written where the direction allows, the snapshot
 records them, and the link is `LINKED` again. A `DELETED` conflict ignores the body: resolving it unlinks the pair
-(`resolution: {choice: "UNLINK"}`) and the conflict stays as history. Errors: `400` invalid choice or a missing custom
-value; `404` the conflict, or its link, no longer exists; `409` already resolved (or resolved meanwhile), a record gone
+(`resolution: {choice: "UNLINK"}`) and the conflict stays as history. Errors: `400` invalid choice, a missing custom
+value, a pick other than `A` or `B`, or a pick of B without an inverse; `404` the conflict, or its link, no longer exists; `409` already resolved (or resolved meanwhile), a record gone
 or changed while resolving.
 
 ## Not implemented yet

@@ -2,6 +2,13 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Sync: resolve a conflict field by field, through the inverse transform
+
+A `CUSTOM` resolution can pick a side per mapping (`fields: {"tier->tier": "B"}`) instead of typing every
+value. A value taken from B goes back to A through the mapping's inverse transform, so an enum map or a
+date conversion lands as A stores it; a transform with no inverse is refused with a violation, never
+guessed (issue #33).
+
 ## 2026-11-04 — Integrations: nothing in use is deleted from under its users
 
 Deleting a connection that a sync definition stands on answers `409` naming the definitions, instead of

@@ -28,9 +28,10 @@ data class RunStarted(
 )
 
 data class ResolveRequest(
-    // A, B, or CUSTOM with values keyed by A's field names
+    // A, B, or CUSTOM with values keyed by A's field names and/or a side per mapping key ("A" | "B")
     val choice: String? = null,
-    val values: Map<String, JsonNode> = emptyMap()
+    val values: Map<String, JsonNode> = emptyMap(),
+    val fields: Map<String, String> = emptyMap()
 )
 
 class SyncOperationsService(
@@ -112,7 +113,7 @@ class SyncOperationsService(
             }
         if (!unlinks) {
             val definition = definitions.find(user.organizationId, conflict.definitionId) ?: throw NotFoundException("Sync definition not found")
-            engine.applyResolution(definition, link, conflict, choice, request.values)
+            engine.applyResolution(definition, link, conflict, choice, request.values, request.fields)
         }
         val resolution = JsonNodeFactory.instance.objectNode().put("choice", if (unlinks) "UNLINK" else request.choice)
         if (request.values.isNotEmpty()) {
@@ -124,6 +125,9 @@ class SyncOperationsService(
                     }
                 }
             )
+        }
+        if (request.fields.isNotEmpty()) {
+            resolution.set("fields", JsonNodeFactory.instance.objectNode().apply { request.fields.forEach { (k, v) -> put(k, v.uppercase()) } })
         }
         // the conflict is closed first: forgetting the pair afterwards keeps it as history (link_id becomes null)
         if (!runs.resolve(id, resolution, user.userId, now)) throw ConflictException("Conflict $id was resolved meanwhile")
