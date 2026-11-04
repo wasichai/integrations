@@ -1,41 +1,64 @@
 package wasichai.integrations
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import wasichai.integrations.sdk.RateLimitHint
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
+// virtual time: the limiter's clock reads the test scheduler, its delays advance it. no wall-clock assertion.
+@OptIn(ExperimentalCoroutinesApi::class)
 class RateLimitsTest {
-    @Test
-    fun `a burst passes at once, the next call waits for a token`() {
-        val limits = RateLimits(Clock.systemUTC())
-        val hint = RateLimitHint(requestsPerSecond = 10.0, burst = 3, scope = "connection")
-        val started = System.nanoTime()
-        runBlocking { repeat(3) { limits.acquire("c", hint) } }
-        assertTrue(Duration.ofNanos(System.nanoTime() - started) < Duration.ofMillis(50))
-        val waited = System.nanoTime()
-        runBlocking { limits.acquire("c", hint) }
-        assertTrue(Duration.ofNanos(System.nanoTime() - waited) >= Duration.ofMillis(60))
+    private class SchedulerClock(
+        private val scheduler: TestCoroutineScheduler
+    ) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId?): Clock = this
+
+        override fun instant(): Instant = Instant.ofEpochMilli(scheduler.currentTime)
     }
 
-    @Test
-    fun `a retry-after pauses the connection, others are untouched`() {
-        val limits = RateLimits(Clock.systemUTC())
-        runBlocking { limits.pause("a", null, Duration.ofMillis(200)) }
-        assertTrue(limits.pausedUntil("a") != null)
-        assertNull(limits.pausedUntil("b"))
-        val started = System.nanoTime()
-        runBlocking { limits.acquire("a", RateLimitHint(100.0, 10, "connection")) }
-        assertTrue(Duration.ofNanos(System.nanoTime() - started) >= Duration.ofMillis(150))
-    }
+    private val hint = RateLimitHint(requestsPerSecond = 10.0, burst = 3, scope = "connection")
 
     @Test
-    fun `no declared limit means no wait`() {
-        runBlocking { RateLimits(Clock.systemUTC()).acquire("x", null) }
-        assertEquals(1, 1)
-    }
+    fun `a burst passes at once, the next call waits for a token`() =
+        runTest {
+            val limits = RateLimits(SchedulerClock(testScheduler))
+            repeat(3) { limits.acquire("c", hint) }
+            assertEquals(0, testScheduler.currentTime, "the burst costs no time")
+            limits.acquire("c", hint)
+            assertEquals(100, testScheduler.currentTime, "one token at 10 per second")
+            limits.acquire("c", hint)
+            assertEquals(200, testScheduler.currentTime)
+        }
+
+    @Test
+    fun `a retry-after pauses the connection, others are untouched`() =
+        runTest {
+            val limits = RateLimits(SchedulerClock(testScheduler))
+            limits.pause("a", null, Duration.ofSeconds(2))
+            assertNotNull(limits.pausedUntil("a"))
+            assertNull(limits.pausedUntil("b"))
+            limits.acquire("b", RateLimitHint(100.0, 10, "connection"))
+            assertEquals(0, testScheduler.currentTime, "another connection is not paused")
+            limits.acquire("a", RateLimitHint(100.0, 10, "connection"))
+            assertEquals(2000, testScheduler.currentTime)
+            assertNull(limits.pausedUntil("a"))
+        }
+
+    @Test
+    fun `no declared limit means no wait`() =
+        runTest {
+            RateLimits(SchedulerClock(testScheduler)).acquire("x", null)
+            assertEquals(0, testScheduler.currentTime)
+        }
 }
