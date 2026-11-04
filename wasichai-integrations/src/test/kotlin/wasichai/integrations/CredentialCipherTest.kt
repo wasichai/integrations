@@ -52,8 +52,9 @@ class CredentialCipherTest {
     fun `tampering is detected`() {
         val cipher = cipher("k1", "k1" to k1)
         val sealed = cipher.seal("x", context)
-        val last = sealed.last()
-        val tampered = sealed.dropLast(1) + (if (last == 'A') 'B' else 'A')
+        // flip a character inside the ciphertext: the last one may only carry unused base64 bits
+        val at = sealed.lastIndexOf('.') + 5
+        val tampered = sealed.substring(0, at) + (if (sealed[at] == 'A') 'B' else 'A') + sealed.substring(at + 1)
         assertThrows<CredentialUnreadableException> { cipher.open(tampered, context) }
         assertThrows<CredentialUnreadableException> { cipher.open("plain", context) }
     }

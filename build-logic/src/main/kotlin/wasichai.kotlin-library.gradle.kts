@@ -52,6 +52,16 @@ tasks.named<Test>("test") {
     }
 }
 
+// ci shows a failure's message and stack in the log: report artifacts are not always reachable
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showCauses = true
+        showStackTraces = true
+    }
+}
+
 // format rewrites sources in place: a cache hit would skip the rewrite and leave them unformatted
 tasks.withType<org.jlleitschuh.gradle.ktlint.tasks.KtLintFormatTask>().configureEach {
     outputs.cacheIf("formats sources in place") { false }
