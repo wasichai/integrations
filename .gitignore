@@ -1,0 +1,41 @@
+# Gradle
+.gradle/
+build/
+# a source package literally named "build" (e.g. wasichai/build/X.kt) must stay tracked
+!**/src/**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+*.local.env
+
+# Logs
+*.log
+logs/
+
+# Tooling scratch
+.playwright-mcp/
+shot-*.png
+.superpowers/
+
+# Kotlin build metadata
+.kotlin/
