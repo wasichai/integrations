@@ -65,7 +65,8 @@ class EventRepository(
     private val m = schemas.metadata
     private val columns =
         "id, organization_id, connection_id, connector_id, endpoint_id, provider_event_id, dedupe_key, event_type, resource_type, resource_id, " +
-            "occurred_at, received_at, source, schema_version, correlation_id, causation_id, payload, metadata, status, processed_at, error"
+            "occurred_at, received_at, source, schema_version, correlation_id, causation_id, payload::text AS payload, metadata::text AS metadata, " +
+            "status, processed_at, error"
 
     // null when this delivery was already stored: a provider retrying is not a new event
     suspend fun insert(event: IntegrationEvent): UUID? =
