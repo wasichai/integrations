@@ -1,0 +1,21 @@
+# Architecture decision records
+
+Decisions of [wasichai/integrations](https://github.com/wasichai/integrations) and
+[wasichai/integrations-ui](https://github.com/wasichai/integrations-ui), numbered in order. Wasichai's own decisions live in
+[its repository](https://github.com/wasichai/wasichai/blob/main/docs/adr) and are cited by URL. A decision is never edited to change it: a later ADR amends or
+supersedes it and says so in its status line.
+
+- [ADR-0001: Integrations ships as Wasichai modules in two repositories of its own](0001-repositories-and-module-boundaries.md)
+- [ADR-0002: A connector is a manifest plus optional, typed capability interfaces](0002-connector-sdk-contracts.md)
+- [ADR-0003: Connectors run in-process as trusted libraries; untrusted code waits for a remote protocol](0003-in-process-trusted-connectors.md)
+- [ADR-0004: The manifest declares capabilities with a maturity, and is checked against the code](0004-connector-manifest-versioning-and-maturity.md)
+- [ADR-0005: Credentials are encrypted with AES-256-GCM under named keys from a key provider](0005-secret-management.md)
+- [ADR-0006: OAuth 2.0 authorization code with PKCE, single-use state rows and a public callback](0006-oauth-flows.md)
+- [ADR-0007: Inbound changes are stored as Event Envelopes; webhooks are verified signals](0007-event-envelope-and-webhooks.md)
+- [ADR-0008: Durable work runs on a PostgreSQL job queue with leases, not on Temporal or wasichai-automation](0008-durable-jobs-in-postgresql.md)
+- [ADR-0009: Synchronization keeps links and snapshots, diffs per field, and never overwrites a conflict silently](0009-sync-semantics-and-conflicts.md)
+- [ADR-0010: Echoes are detected by content hash and causation, not by who made the change](0010-loop-prevention.md)
+- [ADR-0011: Tenant from the token, manage rights for tenant administrators](0011-multi-tenancy-and-permissions.md)
+- [ADR-0012: Connectors are Maven artifacts with semver and an SDK compatibility version](0012-connector-distribution-and-versioning.md)
+- [ADR-0013: Connector actions become MCP tools later, and only when explicitly exposed](0013-mcp-exposure-later-and-opt-in.md)
+- [ADR-0014: Salesforce changes are polled first; Pub/Sub Change Data Capture comes later](0014-salesforce-change-capture.md)
