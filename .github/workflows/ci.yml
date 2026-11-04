@@ -17,8 +17,8 @@ permissions:
 env:
   GITHUB_ACTOR: ${{ github.actor }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # optional classic PAT with read:packages; wins over GITHUB_TOKEN when present (settings.gradle.kts)
-  WASICHAI_PACKAGES_TOKEN: ${{ secrets.WASICHAI_PACKAGES_TOKEN }}
+  # organization secret: a token with read:packages. wins over GITHUB_TOKEN (settings.gradle.kts)
+  WASICHAI_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 
 jobs:
   build:
