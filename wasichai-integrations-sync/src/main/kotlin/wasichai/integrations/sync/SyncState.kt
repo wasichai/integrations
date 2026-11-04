@@ -264,6 +264,29 @@ class SyncStateRepository(
             .awaitSingle()
     }
 
+    suspend fun cursors(definitionId: UUID): List<CursorView> =
+        db
+            .sql("SELECT side, checkpoint, updated_at FROM $m.integration_sync_cursors WHERE definition_id = :definition ORDER BY side")
+            .bind("definition", definitionId)
+            .map { row, _ -> CursorView(Side.valueOf(row.text("side")!!), row.text("checkpoint"), row.instant("updated_at")!!) }
+            .all()
+            .collectList()
+            .awaitSingle()
+
+    // every state present, zero included: a client reads the map without guessing missing keys
+    suspend fun linkCounts(definitionId: UUID): Map<LinkState, Long> {
+        val found =
+            db
+                .sql("SELECT state, count(*) AS n FROM $m.integration_record_links WHERE definition_id = :definition GROUP BY state")
+                .bind("definition", definitionId)
+                .map { row, _ -> LinkState.valueOf(row.text("state")!!) to row.long("n")!! }
+                .all()
+                .collectList()
+                .awaitSingle()
+                .toMap()
+        return LinkState.entries.associateWith { found[it] ?: 0L }
+    }
+
     private fun col(side: Side) = if (side == Side.A) "a" else "b"
 
     private fun read(row: Readable) =

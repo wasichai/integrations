@@ -129,6 +129,32 @@ class SyncOperationsService(
         return runs.conflict(user.organizationId, id)!!
     }
 
+    suspend fun status(definitionId: UUID): SyncStatusView {
+        val user = access.reader()
+        val org = user.organizationId
+        val definition = definitions.find(org, definitionId) ?: throw NotFoundException("Sync definition $definitionId not found")
+        val now = clock.instant()
+        val lastRun = runs.runs(org, definitionId, 1).firstOrNull()
+        // the latest finished run tells whether it is failing now; a later success clears the error
+        val lastFinished = runs.runs(org, definitionId, 20).firstOrNull { it.finishedAt != null }
+        val failing = lastFinished?.takeIf { it.status == RunStatus.FAILED }
+        val candidate = if (definition.status == DefinitionStatus.ACTIVE) runs.scheduleCandidates(org, definitionId).firstOrNull() else null
+        return SyncStatusView(
+            definitionId = definition.id,
+            status = definition.status,
+            lastRun = lastRun,
+            lastSuccessAt = runs.lastSuccessAt(org, definitionId),
+            lastError = failing?.error,
+            errorKind = failing?.errorKind,
+            pendingConflicts = runs.openConflicts(org, definitionId),
+            links = state.linkCounts(definitionId),
+            cursors = state.cursors(definitionId),
+            nextScheduledAt = candidate?.let { SyncSchedule.nextIncremental(it, now) },
+            nextReconcileAt = candidate?.let { SyncSchedule.nextReconcile(it, now) },
+            queuedOrRunning = runs.active(org, definitionId)
+        )
+    }
+
     private fun limit(limit: Int?): Int = (limit ?: 50).also { if (it !in 1..200) throw ValidationException("Invalid limit", "limit", "1 to 200") }
 }
 
@@ -149,6 +175,11 @@ class SyncOperationsController(
         @PathVariable id: UUID,
         @RequestParam(required = false) limit: Int?
     ): List<SyncRunView> = operations.runs(id, limit)
+
+    @GetMapping("/sync-definitions/{id}/status")
+    suspend fun status(
+        @PathVariable id: UUID
+    ): SyncStatusView = operations.status(id)
 
     @GetMapping("/conflicts")
     suspend fun conflicts(

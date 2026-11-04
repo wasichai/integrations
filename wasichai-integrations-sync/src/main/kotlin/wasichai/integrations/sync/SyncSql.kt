@@ -18,6 +18,8 @@ internal fun Readable.uuid(column: String): UUID? = get(column, UUID::class.java
 
 internal fun Readable.int(column: String): Int? = get(column, Int::class.javaObjectType)
 
+internal fun Readable.long(column: String): Long? = get(column, Long::class.javaObjectType)
+
 internal fun DatabaseClient.GenericExecuteSpec.bindText(
     name: String,
     value: String?

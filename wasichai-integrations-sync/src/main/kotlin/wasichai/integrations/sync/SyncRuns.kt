@@ -45,6 +45,12 @@ class RunCounts {
     var skipped = 0
     var conflicts = 0
     var failed = 0
+
+    // reconciliation findings: a linked record gone without a feed entry, a record drifted with no change seen,
+    // a checkpoint the provider refused (that side was read again from the start)
+    var missing = 0
+    var diverged = 0
+    var cursorResets = 0
 }
 
 data class SyncRunView(
@@ -58,7 +64,11 @@ data class SyncRunView(
     val skipped: Int,
     val conflicts: Int,
     val failed: Int,
+    val missing: Int,
+    val diverged: Int,
+    val cursorResets: Int,
     val error: String?,
+    val errorKind: String?,
     val queuedAt: Instant,
     val startedAt: Instant?,
     val finishedAt: Instant?
@@ -85,7 +95,7 @@ class SyncRunRepository(
     private val m = schemas.metadata
     private val runColumns =
         "id, definition_id, trigger, status, read_count, created_count, updated_count, skipped_count, conflict_count, failed_count, error, " +
-            "queued_at, started_at, finished_at"
+            "missing_count, diverged_count, cursor_resets, error_kind, queued_at, started_at, finished_at"
     private val conflictColumns =
         "id, organization_id, definition_id, link_id, kind, fields::text AS fields, status, resolution::text AS resolution, created_at, resolved_at"
 
@@ -138,12 +148,14 @@ class SyncRunRepository(
         status: RunStatus,
         counts: RunCounts,
         error: String?,
-        now: Instant
+        now: Instant,
+        errorKind: String? = null
     ) {
         db
             .sql(
                 "UPDATE $m.integration_sync_runs SET status = :status, read_count = :read, created_count = :created, updated_count = :updated, " +
-                    "skipped_count = :skipped, conflict_count = :conflicts, failed_count = :failed, error = :error, finished_at = :now WHERE id = :id"
+                    "skipped_count = :skipped, conflict_count = :conflicts, failed_count = :failed, missing_count = :missing, " +
+                    "diverged_count = :diverged, cursor_resets = :resets, error = :error, error_kind = :kind, finished_at = :now WHERE id = :id"
             ).bind("status", status.name)
             .bind("read", counts.read)
             .bind("created", counts.created)
@@ -151,7 +163,11 @@ class SyncRunRepository(
             .bind("skipped", counts.skipped)
             .bind("conflicts", counts.conflicts)
             .bind("failed", counts.failed)
+            .bind("missing", counts.missing)
+            .bind("diverged", counts.diverged)
+            .bind("resets", counts.cursorResets)
             .bindText("error", error?.take(2000))
+            .bindText("kind", errorKind)
             .bind("now", now.odt())
             .bind("id", id)
             .fetch()
@@ -279,7 +295,11 @@ class SyncRunRepository(
             row.int("skipped_count")!!,
             row.int("conflict_count")!!,
             row.int("failed_count")!!,
+            row.int("missing_count")!!,
+            row.int("diverged_count")!!,
+            row.int("cursor_resets")!!,
             row.text("error"),
+            row.text("error_kind"),
             row.instant("queued_at")!!,
             row.instant("started_at"),
             row.instant("finished_at")
@@ -297,4 +317,79 @@ class SyncRunRepository(
             row.instant("created_at")!!,
             row.instant("resolved_at")
         )
+
+    // ACTIVE definitions with a schedule or a reconcile interval; every organization when organizationId is null
+    // (the scheduler is platform background work, not a tenant's request)
+    suspend fun scheduleCandidates(
+        organizationId: UUID?,
+        definitionId: UUID? = null
+    ): List<ScheduleCandidate> =
+        db
+            .sql(
+                "SELECT d.id, d.organization_id, d.schedule_seconds, d.reconcile_seconds, " +
+                    "(SELECT max(COALESCE(r.started_at, r.queued_at)) FROM $m.integration_sync_runs r " +
+                    "WHERE r.definition_id = d.id AND r.trigger <> 'RECONCILE') AS last_incremental, " +
+                    "(SELECT max(COALESCE(r.started_at, r.queued_at)) FROM $m.integration_sync_runs r " +
+                    "WHERE r.definition_id = d.id AND r.trigger = 'RECONCILE') AS last_reconcile " +
+                    "FROM $m.integration_sync_definitions d WHERE d.status = 'ACTIVE' " +
+                    "AND (d.schedule_seconds IS NOT NULL OR d.reconcile_seconds IS NOT NULL) " +
+                    "AND (CAST(:org AS uuid) IS NULL OR d.organization_id = :org) AND (CAST(:definition AS uuid) IS NULL OR d.id = :definition) " +
+                    "ORDER BY d.id"
+            ).bindUuid("org", organizationId)
+            .bindUuid("definition", definitionId)
+            .map { row, _ ->
+                ScheduleCandidate(
+                    row.uuid("id")!!,
+                    row.uuid("organization_id")!!,
+                    row.int("schedule_seconds"),
+                    row.int("reconcile_seconds"),
+                    row.instant("last_incremental"),
+                    row.instant("last_reconcile")
+                )
+            }.all()
+            .collectList()
+            .awaitSingle()
+
+    suspend fun lastSuccessAt(
+        organizationId: UUID,
+        definitionId: UUID
+    ): Instant? =
+        db
+            .sql(
+                "SELECT max(finished_at) AS at FROM $m.integration_sync_runs WHERE organization_id = :org AND definition_id = :definition " +
+                    "AND status = 'SUCCEEDED'"
+            ).bind("org", organizationId)
+            .bind("definition", definitionId)
+            .map { row, _ -> java.util.Optional.ofNullable(row.instant("at")) }
+            .one()
+            .awaitSingle()
+            .orElse(null)
+
+    suspend fun active(
+        organizationId: UUID,
+        definitionId: UUID
+    ): Boolean =
+        db
+            .sql(
+                "SELECT count(*) AS n FROM $m.integration_sync_runs WHERE organization_id = :org AND definition_id = :definition " +
+                    "AND status IN ('QUEUED', 'RUNNING')"
+            ).bind("org", organizationId)
+            .bind("definition", definitionId)
+            .map { row, _ -> row.long("n")!! }
+            .one()
+            .awaitSingle() > 0
+
+    suspend fun openConflicts(
+        organizationId: UUID,
+        definitionId: UUID
+    ): Long =
+        db
+            .sql(
+                "SELECT count(*) AS n FROM $m.integration_sync_conflicts WHERE organization_id = :org AND definition_id = :definition " +
+                    "AND status = 'OPEN'"
+            ).bind("org", organizationId)
+            .bind("definition", definitionId)
+            .map { row, _ -> row.long("n")!! }
+            .one()
+            .awaitSingle()
 }

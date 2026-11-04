@@ -14,6 +14,7 @@ import wasichai.integrations.IntegrationsMeters
 import wasichai.integrations.Job
 import wasichai.integrations.JobHandler
 import wasichai.integrations.JobRepository
+import wasichai.integrations.JobRunner
 import wasichai.integrations.PermanentJobFailure
 import wasichai.integrations.Transactions
 import wasichai.integrations.sdk.Change
@@ -87,19 +88,25 @@ class SyncEngine(
         val definition = definitions.find(organizationId, definitionId) ?: return
         val counts = RunCounts()
         runs.start(runId, clock.instant())
+        var outcome = "failed"
         try {
             if (definition.status != DefinitionStatus.ACTIVE) {
-                runs.finish(runId, RunStatus.FAILED, counts, "the definition is not active", clock.instant())
+                runs.finish(runId, RunStatus.FAILED, counts, "the definition is not active", clock.instant(), "permanent")
                 return
             }
             Run(definition, trigger, counts).execute()
-            runs.finish(runId, if (counts.failed > 0) RunStatus.PARTIAL else RunStatus.SUCCEEDED, counts, null, clock.instant())
+            val status = if (counts.failed > 0) RunStatus.PARTIAL else RunStatus.SUCCEEDED
+            runs.finish(runId, status, counts, null, clock.instant())
+            outcome = status.name.lowercase()
         } catch (e: Exception) {
-            runs.finish(runId, RunStatus.FAILED, counts, "${e.javaClass.simpleName}: ${e.message}", clock.instant())
+            // transient: the job tries again later; permanent: a person must act (operators read it on the status)
+            val (retryable, _, _) = JobRunner.classify(e)
+            val kind = if (retryable) "transient" else "permanent"
+            runs.finish(runId, RunStatus.FAILED, counts, "${e.javaClass.simpleName}: ${e.message}", clock.instant(), kind)
             if (e is ConnectorException.AuthExpired) throw PermanentJobFailure("connection needs a new authorization", e)
             throw e
         } finally {
-            record(counts)
+            record(counts, trigger, outcome)
         }
     }
 
@@ -169,8 +176,16 @@ class SyncEngine(
         }
     }
 
-    private fun record(counts: RunCounts) {
+    private fun record(
+        counts: RunCounts,
+        trigger: RunTrigger,
+        outcome: String
+    ) {
         val registry = meters.registry
+        registry.counter("integrations.sync.runs", "kind", trigger.name.lowercase(), "outcome", outcome).increment()
+        registry.counter("integrations.sync.reconcile", "finding", "missing").increment(counts.missing.toDouble())
+        registry.counter("integrations.sync.reconcile", "finding", "diverged").increment(counts.diverged.toDouble())
+        registry.counter("integrations.sync.reconcile", "finding", "cursor_reset").increment(counts.cursorResets.toDouble())
         registry.counter("integrations.sync.records", "outcome", "created").increment(counts.created.toDouble())
         registry.counter("integrations.sync.records", "outcome", "updated").increment(counts.updated.toDouble())
         registry.counter("integrations.sync.records", "outcome", "skipped").increment(counts.skipped.toDouble())
@@ -187,6 +202,11 @@ class SyncEngine(
         private val organizationId = definition.organizationId
         private val sides = mutableMapOf<Side, Pair<ConnectorContext, Any>>()
         private val matchIndex = mutableMapOf<Side, Map<String, ProviderRecord>>()
+        private val reconcile = trigger == RunTrigger.RECONCILE
+        private val startedAt = clock.instant()
+
+        // a reconcile reads every side whole: what it saw, by id, to find what is missing or drifted
+        private val seen = mutableMapOf<Side, MutableMap<String, ProviderRecord>>()
 
         private suspend fun side(side: Side): Pair<ConnectorContext, Any> =
             sides.getOrPut(side) {
@@ -226,7 +246,34 @@ class SyncEngine(
             recoverPending()
             if (trigger == RunTrigger.INITIAL) Side.entries.forEach { state.saveCursor(definition.id, it, null, clock.instant()) }
             for (side in Side.entries) {
-                if (definition.direction.allows(side, side.other)) feed(side)
+                // a reconcile reads a side that never flows too: drift and deletions there count as well
+                if (definition.direction.allows(side, side.other) || reconcile) feed(side)
+            }
+            // a reconcile, or a side whose checkpoint was refused and was read whole again
+            if (seen.isNotEmpty()) reconcileLinks()
+        }
+
+        // what the feeds could not say (reconcile only, after reading both sides whole): a linked record that is gone,
+        // or a target that drifted from what was agreed without a change anyone saw. links settled during this run
+        // are left alone: their records were written after the side was read.
+        private suspend fun reconcileLinks() {
+            for (link in state.inState(definition.id, LinkState.LINKED)) {
+                if (link.lastSyncedAt?.isBefore(startedAt) != true) continue
+                val missing = Side.entries.firstOrNull { side -> seen.containsKey(side) && link.id(side) != null && link.id(side) !in seen.getValue(side) }
+                if (missing != null) {
+                    counts.missing++
+                    log.info("integrations: sync {} reconcile: record {} of {} is gone", definition.id, link.id(missing), missing)
+                    deleted(missing, link.id(missing)!!)
+                    continue
+                }
+                // a side that does not flow was read but not processed: a drift there is put back by the other side
+                for (side in Side.entries.filterNot { definition.direction.allows(it, it.other) }) {
+                    val record = seen[side]?.get(link.id(side)) ?: continue
+                    if (FieldValues.hash(MergePlanner.mapped(definition.mappings, side, record.fields)) == link.hash(side)) continue
+                    val other = seen[side.other]?.get(link.id(side.other)) ?: read(side.other, link.id(side.other)!!) ?: continue
+                    counts.diverged++
+                    merge(link, side.other, other, record, adopt = false)
+                }
             }
         }
 
@@ -243,25 +290,53 @@ class SyncEngine(
         private suspend fun feed(source: Side) {
             val (context, connector) = side(source)
             // a reconcile reads everything again and leaves the cursor where it was
-            val keepCursor = trigger != RunTrigger.RECONCILE
+            val keepCursor = !reconcile
+            val flows = definition.direction.allows(source, source.other)
+            var all = if (reconcile) mutableMapOf<String, ProviderRecord>() else null
             if (connector is ChangeFeed) {
                 var checkpoint = if (keepCursor) state.cursor(definition.id, source) else null
-                do {
-                    val page = connector.changes(context, resource(source), checkpoint, properties.pageSize)
-                    page.changes.forEach { process(source, it) }
+                var reset = false
+                while (true) {
+                    val page =
+                        try {
+                            connector.changes(context, resource(source), checkpoint, properties.pageSize)
+                        } catch (e: ConnectorException.Permanent) {
+                            // a checkpoint the provider no longer accepts (expired, too old): start this side over once.
+                            // the full read that follows is harmless: links and hashes skip what is already in step
+                            if (checkpoint == null || reset) throw e
+                            log.warn("integrations: sync {} side {} checkpoint refused ({}); reading from the start", definition.id, source, e.message)
+                            reset = true
+                            counts.cursorResets++
+                            checkpoint = null
+                            // read whole now: what it sees feeds the same missing and drift checks as a reconcile
+                            all = mutableMapOf()
+                            state.saveCursor(definition.id, source, null, clock.instant())
+                            continue
+                        }
+                    val collect = all
+                    page.changes.forEach { change ->
+                        if (change is Change.Upserted) collect?.put(change.record.id, change.record)
+                        if (flows) process(source, change) else counts.read++
+                    }
                     checkpoint = page.checkpoint
                     // saved after the page: a crash re-reads it, and links and hashes make that harmless
                     if (keepCursor) state.saveCursor(definition.id, source, checkpoint, clock.instant())
-                } while (page.hasMore && page.changes.isNotEmpty())
+                    if (!page.hasMore || page.changes.isEmpty()) break
+                }
             } else {
                 val reader = connector as? ResourceReader ?: throw PermanentJobFailure("side $source can neither feed nor list records")
                 var cursor: String? = null
                 do {
                     val page = reader.list(context, ReadRequest(resource(source), cursor, properties.pageSize))
-                    page.records.forEach { process(source, Change.Upserted(it)) }
+                    page.records.forEach { record ->
+                        all?.put(record.id, record)
+                        if (flows) process(source, Change.Upserted(record)) else counts.read++
+                    }
                     cursor = page.nextCursor
                 } while (cursor != null)
             }
+            // only a side read to its end counts as seen: a failure above leaves it out, so nothing is called missing
+            if (all != null) seen[source] = all
         }
 
         private suspend fun process(
@@ -301,6 +376,8 @@ class SyncEngine(
                 counts.skipped++
                 return
             }
+            // in a reconcile, a record that moved with no change seen in the feed is drift
+            if (reconcile) counts.diverged++
             val other = read(target, link.id(target)!!)
             if (other == null) {
                 deleted(target, link.id(target)!!)
