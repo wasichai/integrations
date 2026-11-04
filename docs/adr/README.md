@@ -19,3 +19,4 @@ supersedes it and says so in its status line.
 - [ADR-0012: Connectors are Maven artifacts with semver and an SDK compatibility version](0012-connector-distribution-and-versioning.md)
 - [ADR-0013: Connector actions become MCP tools later, and only when explicitly exposed](0013-mcp-exposure-later-and-opt-in.md)
 - [ADR-0014: Salesforce changes are polled first; Pub/Sub Change Data Capture comes later](0014-salesforce-change-capture.md)
+- [ADR-0015: The sync engine's implementation refines links, runs, conflicts and reconciliation](0015-sync-implementation-decisions.md)
