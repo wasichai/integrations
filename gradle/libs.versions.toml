@@ -43,6 +43,7 @@ scram-client = { module = "com.ongres.scram:scram-client", version.ref = "scram"
 scram-common = { module = "com.ongres.scram:scram-common", version.ref = "scram" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
 kotlinx-coroutines-reactor = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-reactor" }
+micrometer-core = { module = "io.micrometer:micrometer-core" }
 micrometer-context-propagation = { module = "io.micrometer:context-propagation" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test" }
 

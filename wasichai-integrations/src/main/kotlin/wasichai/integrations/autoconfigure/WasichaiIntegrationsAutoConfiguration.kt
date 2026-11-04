@@ -1,5 +1,7 @@
 package wasichai.integrations.autoconfigure
 
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -27,11 +29,19 @@ import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.CredentialCipher
 import wasichai.integrations.CredentialKeyProvider
 import wasichai.integrations.IntegrationsAccess
+import wasichai.integrations.IntegrationsMeters
+import wasichai.integrations.JobHandler
+import wasichai.integrations.JobRepository
+import wasichai.integrations.JobRunner
+import wasichai.integrations.JobWorker
 import wasichai.integrations.OAuthStateRepository
+import wasichai.integrations.OperationsController
+import wasichai.integrations.OperationsService
 import wasichai.integrations.PlatformHttp
 import wasichai.integrations.ProviderConfigController
 import wasichai.integrations.ProviderConfigRepository
 import wasichai.integrations.ProviderConfigService
+import wasichai.integrations.RateLimits
 import wasichai.integrations.TokenClient
 import wasichai.integrations.Transactions
 import wasichai.integrations.sdk.Connector
@@ -152,8 +162,59 @@ class WasichaiIntegrationsAutoConfiguration {
     fun connectorContexts(
         credentials: ConnectionCredentials,
         http: PlatformHttp,
+        registry: ConnectorRegistry,
+        limits: RateLimits,
+        meters: IntegrationsMeters,
         clock: Clock
-    ): ConnectorContexts = ConnectorContexts(credentials, http, clock)
+    ): ConnectorContexts = ConnectorContexts(credentials, http, registry, limits, meters.registry, clock)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun integrationsMeters(registry: ObjectProvider<MeterRegistry>): IntegrationsMeters = IntegrationsMeters(registry.getIfAvailable { SimpleMeterRegistry() })
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun rateLimits(clock: Clock): RateLimits = RateLimits(clock)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun jobRepository(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): JobRepository = JobRepository(db, json, schemas)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun jobRunner(
+        repository: JobRepository,
+        handlers: ObjectProvider<JobHandler>,
+        properties: IntegrationsProperties,
+        meters: IntegrationsMeters,
+        clock: Clock
+    ): JobRunner = JobRunner(repository, handlers.orderedStream().toList(), properties.jobs, meters.registry, clock)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun jobWorker(
+        runner: JobRunner,
+        properties: IntegrationsProperties
+    ): JobWorker = JobWorker(runner, properties.jobs)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun operationsService(
+        access: IntegrationsAccess,
+        registry: ConnectorRegistry,
+        connections: ConnectionRepository,
+        contexts: ConnectorContexts,
+        jobs: JobRepository,
+        limits: RateLimits,
+        clock: Clock
+    ): OperationsService = OperationsService(access, registry, connections, contexts, jobs, limits, clock)
+
+    @Bean
+    fun operationsController(operations: OperationsService): OperationsController = OperationsController(operations)
 
     @Bean
     @ConditionalOnMissingBean
