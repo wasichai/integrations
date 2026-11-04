@@ -280,6 +280,8 @@ class SyncEngineTest : SyncIntegrationTest() {
         assertEquals("PARTIAL", run.get("status").asString(), run.toString())
         assertEquals(1, run.get("failed").asInt())
         assertTrue(memB.records(pair.b, res).isEmpty(), "no blind second create")
+        // issue #32: an operator sees it
+        assertEquals("ORPHANED_CREATE", conflicts(definition).single().get("kind").asString())
     }
 
     @Test

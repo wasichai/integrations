@@ -111,6 +111,73 @@ class SyncDefinitionApiTest : SyncIntegrationTest() {
     }
 
     @Test
+    fun `externalIdField round trips through create, read and replace`() {
+        val created =
+            call(
+                client,
+                HttpMethod.POST,
+                "/api/integrations/sync-definitions",
+                tenant.admin,
+                body().plus("b" to mapOf("connectionId" to b, "resource" to "contacts", "externalIdField" to " marker ")),
+                201
+            )
+        val id = created.get("id").asString()
+        assertEquals("marker", created.get("b").get("externalIdField").asString())
+        assertTrue(created.get("a").path("externalIdField").isNull || created.get("a").path("externalIdField").isMissingNode)
+        val read = call(client, HttpMethod.GET, "/api/integrations/sync-definitions/$id", tenant.member(), null, 200)
+        assertEquals("marker", read.get("b").get("externalIdField").asString())
+        assertTrue(call(client, HttpMethod.POST, "/api/integrations/sync-definitions/$id/validate", tenant.admin, null, 200).get("valid").asBoolean())
+        val replaced = call(client, HttpMethod.PUT, "/api/integrations/sync-definitions/$id", tenant.admin, body(), 200, mapOf("If-Match" to "\"1\""))
+        assertTrue(replaced.get("b").path("externalIdField").isNull || replaced.get("b").path("externalIdField").isMissingNode)
+    }
+
+    @Test
+    fun `externalIdField must sit where records are created and outside the mappings`() {
+        val problem =
+            call(
+                client,
+                HttpMethod.POST,
+                "/api/integrations/sync-definitions",
+                tenant.admin,
+                body(direction = "A_TO_B", mappings = listOf(mapOf("aField" to "name", "bField" to "name", "owner" to "A")))
+                    .plus("a" to mapOf("connectionId" to a, "resource" to "contacts", "externalIdField" to "marker"))
+                    .plus("b" to mapOf("connectionId" to b, "resource" to "contacts", "externalIdField" to "name")),
+                400
+            )
+        assertTrue(fields(problem).containsAll(setOf("a.externalIdField", "b.externalIdField")), fields(problem).toString())
+    }
+
+    @Test
+    fun `externalIdField must fit the target schema and connector`() {
+        val upserting = tenant.connect("mem-u")
+
+        fun problems(
+            connection: String,
+            field: String
+        ): Set<String> {
+            val id =
+                call(
+                    client,
+                    HttpMethod.POST,
+                    "/api/integrations/sync-definitions",
+                    tenant.admin,
+                    body().plus("b" to mapOf("connectionId" to connection, "resource" to "contacts", "externalIdField" to field)),
+                    201
+                ).get("id").asString()
+            val result = call(client, HttpMethod.POST, "/api/integrations/sync-definitions/$id/validate", tenant.admin, null, 200)
+            return if (result.get("valid").asBoolean()) emptySet() else fields(result)
+        }
+        // marker mode: a writable TEXT field
+        assertEquals(setOf("b.externalIdField"), problems(b, "nope"))
+        assertEquals(setOf("b.externalIdField"), problems(b, "amount"))
+        assertEquals(setOf("b.externalIdField"), problems(b, "computed"))
+        assertEquals(emptySet<String>(), problems(b, "marker"))
+        // upsert mode: one of the connector's external id fields
+        assertEquals(setOf("b.externalIdField"), problems(upserting, "marker"))
+        assertEquals(emptySet<String>(), problems(upserting, "extId"))
+    }
+
+    @Test
     fun `replace needs the version it read`() {
         val created = call(client, HttpMethod.POST, "/api/integrations/sync-definitions", tenant.admin, body(), 201)
         val id = created.get("id").asString()

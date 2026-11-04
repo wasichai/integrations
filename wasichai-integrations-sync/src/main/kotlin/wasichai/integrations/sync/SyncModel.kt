@@ -57,7 +57,10 @@ enum class ConflictStrategy {
 
 data class SideRef(
     val connectionId: UUID? = null,
-    val resource: String? = null
+    val resource: String? = null,
+    // a field of this side that makes a create idempotent: the upsert key when the connector upserts,
+    // otherwise a writable text field the create token is written into and looked up by (issue #32)
+    val externalIdField: String? = null
 )
 
 data class MatchOn(

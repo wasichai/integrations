@@ -25,7 +25,9 @@ import wasichai.integrations.sdk.FieldValue
 import wasichai.integrations.sdk.ProviderRecord
 import wasichai.integrations.sdk.ReadRequest
 import wasichai.integrations.sdk.ResourceReader
+import wasichai.integrations.sdk.ResourceUpserter
 import wasichai.integrations.sdk.ResourceWriter
+import wasichai.integrations.sdk.WriteResult
 import wasichai.integrations.sync.autoconfigure.SyncProperties
 import java.time.Clock
 import java.util.UUID
@@ -202,6 +204,9 @@ class SyncEngine(
         private val organizationId = definition.organizationId
         private val sides = mutableMapOf<Side, Pair<ConnectorContext, Any>>()
         private val matchIndex = mutableMapOf<Side, Map<String, ProviderRecord>>()
+
+        // marker mode: the target's records by the create token they carry, read once per run
+        private val tokenIndex = mutableMapOf<Side, Map<String, ProviderRecord>>()
         private val reconcile = trigger == RunTrigger.RECONCILE
         private val startedAt = clock.instant()
 
@@ -277,14 +282,83 @@ class SyncEngine(
             }
         }
 
-        // a create that started and never settled: the record may exist on the other side or not. without a lookup
-        // by create token (not generally possible) the pair is ORPHANED for an operator, never created twice.
+        // a create that started and never settled: the record may exist on the other side or not. the target's
+        // externalIdField finds it again (upsert by the create token, or a lookup of the token in marker mode);
+        // without one the pair is ORPHANED with an open conflict for an operator, never created twice.
         private suspend fun recoverPending() {
             state.inState(definition.id, LinkState.PENDING_CREATE).forEach { link ->
-                state.setState(link.id, LinkState.ORPHANED, clock.instant())
-                counts.failed++
-                log.warn("integrations: sync {} link {} was left creating; marked ORPHANED", definition.id, link.id)
+                val source = if (link.aId != null) Side.A else Side.B
+                val target = source.other
+                val mode = CreateMode.of(definition.side(target).externalIdField, side(target).second)
+                val record = if (mode == CreateMode.NONE) null else read(source, link.id(source)!!)
+                if (record == null) {
+                    orphan(link, if (mode == CreateMode.NONE) "was left creating" else "was left creating and its source record is gone")
+                    return@forEach
+                }
+                try {
+                    if (mode == CreateMode.MARKER) {
+                        val found = byToken(target, link.createToken.toString())
+                        if (found != null) {
+                            adoptCreated(link, source, record, found)
+                            return@forEach
+                        }
+                    }
+                    write(link, source, record, recovering = true)
+                } catch (e: ConnectorException) {
+                    if (e.retryable) throw e
+                    // refused now, though the first attempt may have created it: a person decides, nothing is repeated
+                    orphan(link, "could not be recovered (${e.javaClass.simpleName})")
+                }
             }
+        }
+
+        private suspend fun orphan(
+            link: RecordLink,
+            why: String
+        ) {
+            tx.run {
+                state.setState(link.id, LinkState.ORPHANED, clock.instant())
+                runs.openConflict(organizationId, definition.id, link.id, ConflictKind.ORPHANED_CREATE, emptyList(), clock.instant())
+            }
+            counts.failed++
+            counts.conflicts++
+            log.warn("integrations: sync {} link {} {}; marked ORPHANED", definition.id, link.id, why)
+        }
+
+        // the record a cut-short create left behind, found by its token: link it, then carry what changed since
+        private suspend fun adoptCreated(
+            link: RecordLink,
+            source: Side,
+            record: ProviderRecord,
+            found: ProviderRecord
+        ) {
+            val ids = if (source == Side.A) record.id to found.id else found.id to record.id
+            val aVersion = if (source == Side.A) record.version else found.version
+            val bVersion = if (source == Side.A) found.version else record.version
+            state.settle(link, ids.first, ids.second, aVersion, bVersion, null, null, clock.instant())
+            log.info("integrations: sync {} link {} recovered: record {} found by its create token", definition.id, link.id, found.id)
+            merge(link.copy(aId = ids.first, bId = ids.second), source, record, found, adopt = true)
+        }
+
+        private suspend fun byToken(
+            target: Side,
+            token: String
+        ): ProviderRecord? {
+            val field = definition.side(target).externalIdField!!
+            val index =
+                tokenIndex.getOrPut(target) {
+                    val (context, connector) = side(target)
+                    val reader = connector as? ResourceReader ?: throw PermanentJobFailure("side $target cannot read records")
+                    val all = mutableMapOf<String, ProviderRecord>()
+                    var cursor: String? = null
+                    do {
+                        val page = reader.list(context, ReadRequest(resource(target), cursor, properties.pageSize))
+                        page.records.forEach { r -> CreateMode.token(r, field)?.let { all.putIfAbsent(it, r) } }
+                        cursor = page.nextCursor
+                    } while (cursor != null)
+                    all
+                }
+            return index[token]
         }
 
         private suspend fun feed(source: Side) {
@@ -438,26 +512,52 @@ class SyncEngine(
             source: Side,
             record: ProviderRecord
         ) {
+            // committed first: a crash after the provider call leaves the token to find the record by
+            val link = state.insertPending(organizationId, definition.id, source, record.id, clock.instant())
+            write(link, source, record, recovering = false)
+        }
+
+        // the create of a pending link: an upsert keyed by its create token where the target can, otherwise a create
+        // that carries the token in the marker field when one is set
+        private suspend fun write(
+            link: RecordLink,
+            source: Side,
+            record: ProviderRecord,
+            recovering: Boolean
+        ) {
             val target = source.other
             val fields =
                 definition.mappings
                     .filter { it.flows(definition.direction, source, target) }
                     .associate { m -> m.field(target) to Transform.of(m).apply(record.fields[m.field(source)] ?: FieldValue.Null, target) }
-            val link = state.insertPending(organizationId, definition.id, source, record.id, clock.instant())
+            val key = definition.side(target).externalIdField
+            val token = link.createToken.toString()
             val (context, connector) = side(target)
-            val writer = connector as? ResourceWriter ?: throw PermanentJobFailure("side $target cannot write records")
-            val result =
+            val mode = CreateMode.of(key, connector)
+            val result: WriteResult =
                 try {
-                    writer.create(context, resource(target), fields)
+                    when (mode) {
+                        CreateMode.UPSERT -> (connector as ResourceUpserter).upsert(context, resource(target), key!!, token, fields)
+                        CreateMode.MARKER -> writer(target, connector).create(context, resource(target), fields + (key!! to FieldValue.Text(token)))
+                        CreateMode.NONE -> writer(target, connector).create(context, resource(target), fields)
+                    }
                 } catch (e: ConnectorException) {
-                    // refused for sure: nothing exists over there, so the pending link goes; a timeout keeps it
-                    if (!e.retryable) state.delete(link.id)
+                    // refused for sure: nothing exists over there, so the pending link goes; a timeout keeps it.
+                    // a retried create may have succeeded the first time: recovery decides, never this delete
+                    if (!e.retryable && !recovering) state.delete(link.id)
                     throw e
                 }
             val created = read(target, result.id) ?: ProviderRecord(result.id, result.version, result.modifiedAt, fields)
             settle(link, source, record, created, emptySet(), null)
-            counts.created++
+            if (recovering) log.info("integrations: sync {} link {} recovered: record {} written with its create token", definition.id, link.id, result.id)
+            // an upsert that found the record from a cut-short create updated it; anything else created one
+            if (mode != CreateMode.UPSERT || result.created) counts.created++ else counts.updated++
         }
+
+        private fun writer(
+            side: Side,
+            connector: Any
+        ): ResourceWriter = connector as? ResourceWriter ?: throw PermanentJobFailure("side $side cannot write records")
 
         private suspend fun merge(
             link: RecordLink,

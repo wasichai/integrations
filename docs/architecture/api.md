@@ -229,13 +229,19 @@ Module `wasichai-integrations-sync`.
 | Field | Type | Rules |
 |---|---|---|
 | `name` | string | 1–200 |
-| `a`, `b` | `{connectionId, resource}` | the tenant's connection (another tenant's is "unknown connection"); resource ≤ 300 |
+| `a`, `b` | `{connectionId, resource, externalIdField?}` | the tenant's connection (another tenant's is "unknown connection"); resource ≤ 300 |
 | `direction` | enum | `A_TO_B`, `B_TO_A`, `BIDIRECTIONAL` |
 | `deletePolicy` | enum | `PROPAGATE`, `IGNORE`, `FLAG` (default) |
 | `scheduleSeconds` | int? | ≥ 60; incremental runs by the scheduler |
 | `reconcileSeconds` | int? | ≥ 300; reconcile runs by the scheduler |
 | `matchOn` | `{aField, bField}?` | links existing records with equal values instead of creating them |
 | `mappings` | `FieldMapping[]` | 1–200; a field of A or of B mapped once at most |
+
+`externalIdField` (1–200, optional) names a field of a side the sync creates records in, never a mapped one. When that
+side's connector upserts it is the upsert key and must be an external id field of the schema; otherwise it must be a
+writable `TEXT` field and holds the create token (marker mode). Both make an interrupted create recoverable without a
+duplicate; without it, an unfinished create becomes an `ORPHANED_CREATE` conflict. Create and replace check where it
+may be used (`400`); `validate` and `activate` check it against the schema.
 
 `FieldMapping`: `{aField, bField, transform?, owner, conflictStrategy}`. `owner` `A | B | BOTH` (default `BOTH`, which
 needs `BIDIRECTIONAL`; `A` cannot be used with `B_TO_A`, `B` not with `A_TO_B`). `conflictStrategy` `SOURCE_WINS |
@@ -294,8 +300,9 @@ are set for an `ACTIVE` definition with a schedule (now, when it never ran).
 | POST | `/conflicts/{id}/resolve` | M | `200` the resolved `ConflictView` |
 
 `ConflictView`: `{id, definitionId, linkId?, kind, fields, status, resolution?, detectedAt, resolvedAt?}`. `kind`
-`FIELDS` (both sides changed a field and no rule decided) or `DELETED` (a linked record was deleted under policy
-`FLAG`; `fields` is empty). `fields`: `[{key, aField, bField, a, b, base?: {a, b}}]`, values typed as `{"t": "text", "v":
+`FIELDS` (both sides changed a field and no rule decided), `DELETED` (a linked record was deleted under policy
+`FLAG`; `fields` is empty) or `ORPHANED_CREATE` (a create was interrupted and cannot be recovered without an
+`externalIdField`; `fields` is empty). `fields`: `[{key, aField, bField, a, b, base?: {a, b}}]`, values typed as `{"t": "text", "v":
 "…"}` (`t` one of `null`, `text`, `number`, `bool`, `date`, `datetime`, `choice`, `multi`, `ref` with `r`, `json`).
 `linkId` is null once the pair is forgotten.
 

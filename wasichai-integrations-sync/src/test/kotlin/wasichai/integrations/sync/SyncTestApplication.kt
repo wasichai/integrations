@@ -13,4 +13,7 @@ class SyncTestApplication {
 
     @Bean
     fun memB(): MemConnector = MemConnector("mem-b")
+
+    @Bean
+    fun memU(): MemUpserter = MemUpserter("mem-u")
 }

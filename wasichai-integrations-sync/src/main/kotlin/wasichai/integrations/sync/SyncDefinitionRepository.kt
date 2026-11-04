@@ -17,7 +17,8 @@ class SyncDefinitionRepository(
     private val m = schemas.metadata
     private val columns =
         "id, organization_id, name, a_connection_id, a_resource, b_connection_id, b_resource, direction, status, delete_policy, " +
-            "schedule_seconds, reconcile_seconds, match_on::text AS match_on, mappings::text AS mappings, version, created_at, updated_at"
+            "a_external_id_field, b_external_id_field, schedule_seconds, reconcile_seconds, match_on::text AS match_on, mappings::text AS mappings, " +
+            "version, created_at, updated_at"
 
     suspend fun list(organizationId: UUID): List<SyncDefinition> =
         db
@@ -63,8 +64,9 @@ class SyncDefinitionRepository(
         db
             .sql(
                 "INSERT INTO $m.integration_sync_definitions (id, organization_id, name, a_connection_id, a_resource, b_connection_id, b_resource, " +
-                    "direction, status, delete_policy, schedule_seconds, reconcile_seconds, match_on, mappings, created_by, created_at, updated_at) " +
-                    "VALUES (:id, :org, :name, :aConnection, :aResource, :bConnection, :bResource, :direction, :status, :deletePolicy, :schedule, " +
+                    "a_external_id_field, b_external_id_field, direction, status, delete_policy, schedule_seconds, reconcile_seconds, match_on, mappings, " +
+                    "created_by, created_at, updated_at) VALUES (:id, :org, :name, :aConnection, :aResource, :bConnection, :bResource, :aExternalId, " +
+                    ":bExternalId, :direction, :status, :deletePolicy, :schedule, " +
                     ":reconcile, CAST(:matchOn AS jsonb), CAST(:mappings AS jsonb), :createdBy, :now, :now)"
             ).bind("id", definition.id)
             .bind("org", definition.organizationId)
@@ -85,7 +87,8 @@ class SyncDefinitionRepository(
         db
             .sql(
                 "UPDATE $m.integration_sync_definitions SET name = :name, a_connection_id = :aConnection, a_resource = :aResource, " +
-                    "b_connection_id = :bConnection, b_resource = :bResource, direction = :direction, delete_policy = :deletePolicy, " +
+                    "b_connection_id = :bConnection, b_resource = :bResource, a_external_id_field = :aExternalId, b_external_id_field = :bExternalId, " +
+                    "direction = :direction, delete_policy = :deletePolicy, " +
                     "schedule_seconds = :schedule, reconcile_seconds = :reconcile, match_on = CAST(:matchOn AS jsonb), mappings = CAST(:mappings AS jsonb), " +
                     "version = version + 1, updated_at = :now WHERE organization_id = :org AND id = :id AND version = :version"
             ).let { bindBody(it, definition) }
@@ -137,6 +140,8 @@ class SyncDefinitionRepository(
             .bind("aResource", d.a.resource!!)
             .bind("bConnection", d.b.connectionId!!)
             .bind("bResource", d.b.resource!!)
+            .bindText("aExternalId", d.a.externalIdField)
+            .bindText("bExternalId", d.b.externalIdField)
             .bind("direction", d.direction.name)
             .bind("deletePolicy", d.deletePolicy.name)
             .bindInt("schedule", d.scheduleSeconds)
@@ -149,8 +154,8 @@ class SyncDefinitionRepository(
             id = row.uuid("id")!!,
             organizationId = row.uuid("organization_id")!!,
             name = row.text("name")!!,
-            a = SideRef(row.uuid("a_connection_id"), row.text("a_resource")),
-            b = SideRef(row.uuid("b_connection_id"), row.text("b_resource")),
+            a = SideRef(row.uuid("a_connection_id"), row.text("a_resource"), row.text("a_external_id_field")),
+            b = SideRef(row.uuid("b_connection_id"), row.text("b_resource"), row.text("b_external_id_field")),
             direction = SyncDirection.valueOf(row.text("direction")!!),
             status = DefinitionStatus.valueOf(row.text("status")!!),
             deletePolicy = DeletePolicy.valueOf(row.text("delete_policy")!!),
