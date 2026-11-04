@@ -59,7 +59,8 @@ class JobRepository(
 ) {
     private val m = schemas.metadata
     private val columns =
-        "id, organization_id, kind, dedupe_key, payload, status, attempts, max_attempts, next_attempt_at, lease_until, last_error, error_kind, " +
+        "id, organization_id, kind, dedupe_key, payload::text AS payload, status, attempts, max_attempts, next_attempt_at, lease_until, " +
+            "last_error, error_kind, " +
             "correlation_id, created_at, updated_at, finished_at"
 
     // false when the same key is already waiting or running
