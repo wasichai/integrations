@@ -20,13 +20,13 @@ Flyway history and carry `organization_id uuid not null` with an index leading o
 
 | Table | Key columns | Constraints and notes |
 |---|---|---|
-| `sync_definitions` | id, org, name, a_connection_id, a_resource, b_connection_id, b_resource, direction, schedule, reconcile_schedule, delete_policy, status, version | UNIQUE (org, name); FKs to `connections` |
+| `sync_definitions` | id, org, name, a_connection_id, a_resource, a_external_id_field, b_connection_id, b_resource, b_external_id_field, direction, schedule, reconcile_schedule, delete_policy, status, version | UNIQUE (org, name); FKs to `connections` |
 | `field_mappings` | id, definition_id FK, position, a_field, b_field, transform jsonb, owner, conflict_strategy | UNIQUE (definition_id, a_field, b_field) |
 | `sync_cursors` | definition_id, side, cursor jsonb, updated_at | PK (definition_id, side) |
 | `record_links` | id, org, definition_id, a_id, b_id null, a_version, b_version, a_written_hash, b_written_hash, state, create_token, updated_at, version | UNIQUE (definition_id, a_id); UNIQUE (definition_id, b_id); UNIQUE (definition_id, create_token) |
 | `record_snapshots` | link_id PK/FK, values jsonb, hash, synced_at | last values both sides agreed on |
 | `sync_runs` | id, org, definition_id, kind, status, started_at, finished_at, counts jsonb, error, correlation_id | index (definition_id, started_at desc) |
-| `sync_conflicts` | id, org, link_id, definition_id, fields jsonb (a, b, base per field), status, detected_at, resolved_by, resolved_at, resolution jsonb | one OPEN conflict per link (partial unique index) |
+| `sync_conflicts` | id, org, link_id, definition_id, kind (FIELDS, DELETED, ORPHANED_CREATE), fields jsonb (a, b, base per field), status, detected_at, resolved_by, resolved_at, resolution jsonb | one OPEN conflict per link (partial unique index) |
 
 ## Rules
 

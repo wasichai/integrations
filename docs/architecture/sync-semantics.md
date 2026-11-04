@@ -43,10 +43,18 @@ and [ADR-0010](../adr/0010-loop-prevention.md).
 
 ## Creates without duplicates
 
-Before calling the provider, a `PENDING_CREATE` link with a random create token is committed. The connector writes the
-token where the provider allows (Salesforce: an external-ID field and upsert; Notion: a hidden property), so a retry
-after a timeout finds the record instead of creating another. A pending link older than a threshold is resolved by that
-lookup during reconciliation.
+Before calling the provider, a `PENDING_CREATE` link with a random create token is committed. The target side's
+`externalIdField` says where the token goes ([#32](https://github.com/wasichai/integrations/issues/32)):
+
+- **upsert** — the connector implements upsert (Salesforce): every create is an upsert keyed by the token;
+- **marker** — any other connector: the create writes the token into that writable text field (Notion: a property);
+- **none** — no field set: the token stays in the platform only.
+
+Every run starts with the links still `PENDING_CREATE` (a create cut short by a crash or a timeout): upsert writes again
+with the same token, which is idempotent; marker lists the target and links the record that carries the token, then
+carries what changed since, or creates it again with the token when none does; none marks the link `ORPHANED` and opens
+an `ORPHANED_CREATE` conflict, because nothing can tell whether the record exists. Resolving that conflict unlinks the
+pair. A recovery the provider refuses is treated as none: the first attempt may have succeeded.
 
 ## Deletes
 

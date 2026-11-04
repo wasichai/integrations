@@ -29,7 +29,10 @@ enum class RunStatus {
 
 enum class ConflictKind {
     FIELDS,
-    DELETED
+    DELETED,
+
+    // a create was cut short and nothing can tell whether the record exists on the target: the link is ORPHANED
+    ORPHANED_CREATE
 }
 
 enum class ConflictStatus {

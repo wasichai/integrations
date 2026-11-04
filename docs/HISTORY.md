@@ -2,6 +2,14 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Sync: creates cut short are recovered, not duplicated
+
+A sync side may name an `externalIdField` ([#32](https://github.com/wasichai/integrations/issues/32)): creates there
+upsert by the link's create token when the connector can, or write the token into that field; a run finds a create left
+`PENDING_CREATE` again by the same token, and without the field marks it `ORPHANED` with an `ORPHANED_CREATE` conflict.
+Migration `V4__sync_create_recovery`. REST change: `externalIdField` on definition sides, conflict kind
+`ORPHANED_CREATE`. New tests: `CreateModeTest`, `CreateRecoveryTest`, cases in `SyncDefinitionApiTest`, `SyncEngineTest`.
+
 ## 2026-11-04 — Releases: release-please, Maven publishing behind a guard, integrations-bom
 
 One version for every module through release-please on `gradle.properties`; a published release runs `publish.yml`,

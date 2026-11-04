@@ -11,6 +11,7 @@ import wasichai.integrations.sdk.FieldType
 import wasichai.integrations.sdk.ResourceDiscovery
 import wasichai.integrations.sdk.ResourceReader
 import wasichai.integrations.sdk.ResourceSchema
+import wasichai.integrations.sdk.ResourceUpserter
 import wasichai.integrations.sdk.ResourceWriter
 import java.util.UUID
 
@@ -57,7 +58,27 @@ class DefinitionValidator(
         duplicates(request.mappings.mapNotNull { it.aField }).forEach { v += FieldViolation("mappings", "field '$it' of A is mapped twice") }
         duplicates(request.mappings.mapNotNull { it.bField }).forEach { v += FieldViolation("mappings", "field '$it' of B is mapped twice") }
         request.matchOn?.let { if (it.aField.isNullOrBlank() || it.bField.isNullOrBlank()) v += FieldViolation("matchOn", "aField and bField") }
+        for (side in Side.entries) externalIdField(side, if (side == Side.A) request.a else request.b, request, v)
         return v
+    }
+
+    // only where the sync creates records, and never a mapped field: a mapping would overwrite the create token
+    private fun externalIdField(
+        side: Side,
+        ref: SideRef?,
+        request: SyncDefinitionRequest,
+        v: MutableList<FieldViolation>
+    ) {
+        val name = ref?.externalIdField?.trim() ?: return
+        val path = "${side.name.lowercase()}.externalIdField"
+        if (name.isEmpty() || name.length > 200) {
+            v += FieldViolation(path, "1 to 200 characters")
+            return
+        }
+        if (request.direction?.allows(side.other, side) == false) v += FieldViolation(path, "the sync never creates records in ${side.name}")
+        if (request.mappings.any { (if (side == Side.A) it.aField else it.bField)?.trim() == name }) {
+            v += FieldViolation(path, "'$name' is mapped: a mapping would overwrite the create token")
+        }
     }
 
     // the fields against what the providers say today. provider failures surface as http errors, not as violations
@@ -66,6 +87,7 @@ class DefinitionValidator(
         val v = structural(definition.organizationId, request).toMutableList()
         if (v.isNotEmpty()) return v
         val schemas = mutableMapOf<Side, ResourceSchema>()
+        val upserts = mutableMapOf<Side, Boolean>()
         for (side in Side.entries) {
             val ref = definition.side(side)
             val connection = connections.find(definition.organizationId, ref.connectionId!!)!!
@@ -79,6 +101,7 @@ class DefinitionValidator(
             if (definition.direction.allows(side.other, side) && connector !is ResourceWriter) {
                 v += FieldViolation("$label.connectionId", "connector '${connection.connectorId}' cannot write records")
             }
+            upserts[side] = connector is ResourceUpserter
             schemas[side] =
                 try {
                     connector.describe(contexts.forConnection(connection), ref.resource!!)
@@ -94,6 +117,13 @@ class DefinitionValidator(
         definition.matchOn?.let { match ->
             if (schemas.getValue(Side.A).field(match.aField!!) == null) v += FieldViolation("matchOn.aField", "no field '${match.aField}' in A")
             if (schemas.getValue(Side.B).field(match.bField!!) == null) v += FieldViolation("matchOn.bField", "no field '${match.bField}' in B")
+        }
+        for (side in Side.entries) {
+            val name = definition.side(side).externalIdField ?: continue
+            val schema = schemas.getValue(side)
+            externalIdProblem(name, schema.field(name), upserts.getValue(side), schema.label)?.let {
+                v += FieldViolation("${side.name.lowercase()}.externalIdField", it)
+            }
         }
         return v
     }
@@ -136,6 +166,22 @@ class DefinitionValidator(
     }
 
     companion object {
+        // an upserting connector keys on one of its external id fields; any other connector needs a writable
+        // text field to carry the create token (marker mode). null when the field fits
+        fun externalIdProblem(
+            name: String,
+            field: FieldDescriptor?,
+            upserts: Boolean,
+            label: String
+        ): String? =
+            when {
+                field == null -> "no field '$name' in $label"
+                field.readOnly -> "'$name' is read-only"
+                upserts && !field.externalId -> "'$name' is not an external id field of $label"
+                !upserts && field.type != FieldType.TEXT -> "'$name' must be a TEXT field to hold the create token (the connector cannot upsert)"
+                else -> null
+            }
+
         private val TEXTUAL = setOf(FieldType.TEXT, FieldType.CHOICE)
         private val TEMPORAL = setOf(FieldType.DATE, FieldType.DATETIME)
 

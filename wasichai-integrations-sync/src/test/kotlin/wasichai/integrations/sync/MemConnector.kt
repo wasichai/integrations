@@ -23,18 +23,21 @@ import wasichai.integrations.sdk.ResourceDescriptor
 import wasichai.integrations.sdk.ResourceDiscovery
 import wasichai.integrations.sdk.ResourceReader
 import wasichai.integrations.sdk.ResourceSchema
+import wasichai.integrations.sdk.ResourceUpserter
 import wasichai.integrations.sdk.ResourceWriter
 import wasichai.integrations.sdk.SdkVersion
 import wasichai.integrations.sdk.SyncDirectionSupport
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 // a provider in memory for sync tests: records per connection, versions, a change feed by sequence.
 // tests change it directly (an edit "in the provider") and count what the engine wrote.
-class MemConnector(
-    id: String
+open class MemConnector(
+    id: String,
+    upserts: Boolean = false
 ) : Connector,
     Authenticator,
     ResourceDiscovery,
@@ -69,11 +72,11 @@ class MemConnector(
                     Capability.READ to Maturity.TESTED,
                     Capability.CHANGE_FEED to Maturity.TESTED,
                     Capability.WRITE to Maturity.TESTED
-                ),
+                ) + (if (upserts) mapOf(Capability.UPSERT to Maturity.TESTED) else emptyMap()),
             syncDirections = setOf(SyncDirectionSupport.SOURCE, SyncDirectionSupport.TARGET)
         )
 
-    private fun table(
+    protected fun table(
         connection: String,
         resource: String
     ) = data.computeIfAbsent("$connection/$resource") { ConcurrentHashMap() }
@@ -118,6 +121,15 @@ class MemConnector(
         table(connection, resource).remove(id)
     }
 
+    // the next creating write lands in the store, then the process "dies" before the engine sees the answer
+    private val dieAfterCreate = AtomicBoolean()
+
+    fun dieAfterNextCreate() = dieAfterCreate.set(true)
+
+    protected fun created(id: String) {
+        if (dieAfterCreate.getAndSet(false)) throw IllegalStateException("process died after the provider created $id")
+    }
+
     // a checkpoint the provider no longer accepts (like an expired delta token): changes() refuses any checkpoint
     @Volatile
     var refuseCheckpoints = false
@@ -147,7 +159,10 @@ class MemConnector(
                 FieldDescriptor("tier", "Tier", FieldType.CHOICE, options = listOf("gold", "silver", "GOLD", "SILVER")),
                 FieldDescriptor("amount", "Amount", FieldType.NUMBER),
                 FieldDescriptor("since", "Since", FieldType.DATE),
-                FieldDescriptor("computed", "Computed", FieldType.TEXT, readOnly = true)
+                FieldDescriptor("computed", "Computed", FieldType.TEXT, readOnly = true),
+                // an upsert key, and a plain text field that can carry a create token
+                FieldDescriptor("extId", "External id", FieldType.TEXT, externalId = true),
+                FieldDescriptor("marker", "Marker", FieldType.TEXT)
             )
         )
     }
@@ -184,6 +199,7 @@ class MemConnector(
     ): wasichai.integrations.sdk.WriteResult {
         count(context)
         val id = put(context.connectionId, resource, fields)
+        created(id)
         val stored = table(context.connectionId, resource)[id]!!
         return wasichai.integrations.sdk.WriteResult(id, stored.version.toString(), stored.modifiedAt, true)
     }
@@ -214,9 +230,30 @@ class MemConnector(
         remove(context.connectionId, resource, id)
     }
 
-    private fun count(context: ConnectorContext) {
+    protected fun count(context: ConnectorContext) {
         writes.computeIfAbsent(context.connectionId) { AtomicLong() }.incrementAndGet()
     }
 
     private fun record(s: Stored) = ProviderRecord(s.id, s.version.toString(), s.modifiedAt, s.fields + ("computed" to FieldValue.Text("c-${s.id.take(4)}")))
+}
+
+// the same provider with upsert by an external id field, like Salesforce's PATCH on an external id
+class MemUpserter(
+    id: String
+) : MemConnector(id, upserts = true),
+    ResourceUpserter {
+    override suspend fun upsert(
+        context: ConnectorContext,
+        resource: String,
+        externalIdField: String,
+        externalId: String,
+        fields: Map<String, FieldValue>
+    ): wasichai.integrations.sdk.WriteResult {
+        count(context)
+        val existing = records(context.connectionId, resource).firstOrNull { it.fields[externalIdField] == FieldValue.Text(externalId) }
+        val id = put(context.connectionId, resource, fields + (externalIdField to FieldValue.Text(externalId)), existing?.id ?: UUID.randomUUID().toString())
+        if (existing == null) created(id)
+        val stored = table(context.connectionId, resource)[id]!!
+        return wasichai.integrations.sdk.WriteResult(id, stored.version.toString(), stored.modifiedAt, existing == null)
+    }
 }

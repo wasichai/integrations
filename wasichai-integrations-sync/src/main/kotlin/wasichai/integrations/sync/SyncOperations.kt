@@ -97,8 +97,10 @@ class SyncOperationsService(
         val link =
             conflict.linkId?.let { state.find(user.organizationId, it) } ?: throw NotFoundException("Conflict $id has no link anymore")
         val now = clock.instant()
+        // a deleted record or a create nobody can recover: resolving forgets the pair
+        val unlinks = conflict.kind != ConflictKind.FIELDS
         val choice =
-            if (conflict.kind == ConflictKind.DELETED) {
+            if (unlinks) {
                 null
             } else {
                 when (request.choice?.uppercase()) {
@@ -108,11 +110,11 @@ class SyncOperationsService(
                     else -> throw ValidationException("Invalid resolution", "choice", "A, B or CUSTOM")
                 }
             }
-        if (conflict.kind != ConflictKind.DELETED) {
+        if (!unlinks) {
             val definition = definitions.find(user.organizationId, conflict.definitionId) ?: throw NotFoundException("Sync definition not found")
             engine.applyResolution(definition, link, conflict, choice, request.values)
         }
-        val resolution = JsonNodeFactory.instance.objectNode().put("choice", if (conflict.kind == ConflictKind.DELETED) "UNLINK" else request.choice)
+        val resolution = JsonNodeFactory.instance.objectNode().put("choice", if (unlinks) "UNLINK" else request.choice)
         if (request.values.isNotEmpty()) {
             resolution.set(
                 "values",
@@ -125,7 +127,7 @@ class SyncOperationsService(
         }
         // the conflict is closed first: forgetting the pair afterwards keeps it as history (link_id becomes null)
         if (!runs.resolve(id, resolution, user.userId, now)) throw ConflictException("Conflict $id was resolved meanwhile")
-        if (conflict.kind == ConflictKind.DELETED) state.delete(link.id)
+        if (unlinks) state.delete(link.id)
         return runs.conflict(user.organizationId, id)!!
     }
 
