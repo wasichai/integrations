@@ -7,7 +7,12 @@ import wasichai.test.WasichaiIntegrationTest
 class AppBootsTest : WasichaiIntegrationTest() {
     @Test
     fun `health answers and the seeded admin signs in`() {
-        client.get().uri("/api/health").exchange().expectStatus().isOk
+        client
+            .get()
+            .uri("/api/health")
+            .exchange()
+            .expectStatus()
+            .isOk
         client
             .get()
             .uri("/api/auth/me")
