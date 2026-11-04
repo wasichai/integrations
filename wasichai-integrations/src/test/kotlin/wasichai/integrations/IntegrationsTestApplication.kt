@@ -29,4 +29,24 @@ class IntegrationsTestApplication {
 
     @Bean
     fun recordingListener(): RecordingListener = RecordingListener()
+
+    @Bean
+    fun heldConnections(): HeldConnections = HeldConnections()
+}
+
+// a module holding on to connections, as the sync module does
+class HeldConnections : ConnectionUsage {
+    private val held = java.util.concurrent.ConcurrentHashMap<java.util.UUID, String>()
+
+    fun hold(
+        connection: java.util.UUID,
+        by: String
+    ) = held.put(connection, by)
+
+    fun release(connection: java.util.UUID) = held.remove(connection)
+
+    override suspend fun usedBy(
+        organizationId: java.util.UUID,
+        connectionId: java.util.UUID
+    ): List<String> = listOfNotNull(held[connectionId])
 }

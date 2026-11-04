@@ -125,8 +125,13 @@ class ProviderConfigRepository(
         connectorId: String
     ): Boolean =
         db
-            .sql("DELETE FROM $m.integration_provider_configs WHERE organization_id = :org AND connector_id = :connector")
-            .bind("org", organizationId)
+            .sql(
+                """
+                DELETE FROM $m.integration_provider_configs p
+                WHERE p.organization_id = :org AND p.connector_id = :connector
+                  AND NOT EXISTS (SELECT 1 FROM $m.integration_connections c WHERE c.organization_id = :org AND c.connector_id = :connector)
+                """.trimIndent()
+            ).bind("org", organizationId)
             .bind("connector", connectorId)
             .fetch()
             .rowsUpdated()
@@ -225,7 +230,11 @@ class ProviderConfigService(
 
     suspend fun delete(connectorId: String) {
         val user = access.manager()
-        if (!repository.delete(user.organizationId, connectorId)) throw notFound(connectorId)
+        // in one statement: a connection made meanwhile cannot lose the app it refreshes with
+        if (!repository.delete(user.organizationId, connectorId)) {
+            if (repository.find(user.organizationId, connectorId) == null) throw notFound(connectorId)
+            throw ConflictException("Connections to '$connectorId' still use this provider app; delete them first")
+        }
     }
 
     // for the oauth flow (issue #5): the clear secret, only inside the server

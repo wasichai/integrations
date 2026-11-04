@@ -12,6 +12,7 @@ import wasichai.core.platform.ClusterLock
 import wasichai.core.platform.ModuleMigration
 import wasichai.core.platform.WasichaiSchemas
 import wasichai.integrations.ConnectionRepository
+import wasichai.integrations.ConnectionUsage
 import wasichai.integrations.ConnectorContexts
 import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.IntegrationsAccess
@@ -48,6 +49,11 @@ class WasichaiIntegrationsSyncAutoConfiguration {
         json: JsonMapper,
         schemas: WasichaiSchemas
     ): SyncDefinitionRepository = SyncDefinitionRepository(db, json, schemas)
+
+    // a connection a definition stands on is not deleted under it (issue #51)
+    @Bean
+    fun syncConnectionUsage(repository: SyncDefinitionRepository): ConnectionUsage =
+        ConnectionUsage { org, connection -> repository.namesOnConnection(org, connection).map { "sync definition '$it'" } }
 
     @Bean
     @ConditionalOnMissingBean

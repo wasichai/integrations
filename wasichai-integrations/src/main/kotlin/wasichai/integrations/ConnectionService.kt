@@ -79,7 +79,8 @@ class ConnectionService(
     private val cipher: CredentialCipher,
     private val tx: Transactions,
     private val properties: IntegrationsProperties,
-    private val clock: Clock
+    private val clock: Clock,
+    private val usages: List<ConnectionUsage> = emptyList()
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val random = SecureRandom()
@@ -240,8 +241,9 @@ class ConnectionService(
         }
     }
 
+    // a manager's action: it calls the provider and changes the connection's status and health
     suspend fun test(id: UUID): ConnectionTestView {
-        val user = access.reader()
+        val user = access.manager()
         val connection = find(user.organizationId, id)
         val now = clock.instant()
         return try {
@@ -278,6 +280,8 @@ class ConnectionService(
     suspend fun delete(id: UUID) {
         val user = access.manager()
         val connection = find(user.organizationId, id)
+        val users = usages.flatMap { it.usedBy(user.organizationId, id) }
+        if (users.isNotEmpty()) throw ConflictException("Connection $id is still used by ${users.joinToString(", ")}; delete those first")
         val method =
             registry
                 .find(connection.connectorId)

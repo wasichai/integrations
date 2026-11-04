@@ -2,6 +2,14 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Integrations: nothing in use is deleted from under its users
+
+Deleting a connection that a sync definition stands on answers `409` naming the definitions, instead of
+taking their links, runs and open conflicts with it (a `ConnectionUsage` SPI in the core, implemented
+by the sync module). Deleting a provider app while connections to its connector exist answers `409`.
+Testing a connection is now a manager's action, and a webhook endpoint lists with a `null` url when the
+public base url is no longer configured instead of failing with a 500 (issue #51).
+
 ## 2026-11-04 — Sync: a write that keeps losing the race is a resolvable conflict
 
 When the target moved on twice between read and write, the pair was held with conflict fields keyed by
