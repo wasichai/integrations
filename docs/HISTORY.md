@@ -2,6 +2,13 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Sync: a write that keeps losing the race is a resolvable conflict
+
+When the target moved on twice between read and write, the pair was held with conflict fields keyed by
+provider field name instead of the mapping key, so resolving it did nothing. The held conflict now
+carries the mapping key, both field names and the values last read, like any other FIELDS conflict
+(issue #50).
+
 ## 2026-11-04 — Sync: creates cut short are recovered, not duplicated
 
 A sync side may name an `externalIdField` ([#32](https://github.com/wasichai/integrations/issues/32)): creates there
