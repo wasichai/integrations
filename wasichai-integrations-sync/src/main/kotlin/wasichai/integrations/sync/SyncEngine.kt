@@ -118,7 +118,8 @@ class SyncEngine(
         link: RecordLink,
         conflict: ConflictView,
         choice: Side?,
-        values: Map<String, JsonNode>
+        values: Map<String, JsonNode>,
+        picks: Map<String, String> = emptyMap()
     ) {
         val run = Run(definition, RunTrigger.MANUAL, RunCounts())
         val a = run.read(Side.A, link.aId!!) ?: throw ConflictException("The record in A is gone; resolve again after the next run")
@@ -136,16 +137,16 @@ class SyncEngine(
         for (m in definition.mappings.filter { it.key in keys }) {
             val transform = Transform.of(m)
             val chosenA =
-                when (choice) {
-                    Side.A -> a.fields[m.aField] ?: FieldValue.Null
-                    Side.B -> transform.toA(b.fields[m.bField] ?: FieldValue.Null)
-                    null ->
-                        values[m.aField]?.let { FieldValues.fromPlain(it) }
-                            ?: run {
-                                violations += FieldViolation("values.${m.aField}", "required")
-                                continue
-                            }
-                }
+                Resolution.chooseA(
+                    m,
+                    transform,
+                    a.fields[m.aField] ?: FieldValue.Null,
+                    b.fields[m.bField] ?: FieldValue.Null,
+                    choice,
+                    values[m.aField],
+                    picks[m.key],
+                    violations
+                ) ?: continue
             val chosenB = transform.toB(chosenA)
             if (definition.direction.allows(Side.B, Side.A) &&
                 !FieldValues.same(chosenA, a.fields[m.aField] ?: FieldValue.Null)

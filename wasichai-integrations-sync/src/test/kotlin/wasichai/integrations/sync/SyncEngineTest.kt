@@ -15,6 +15,8 @@ import wasichai.integrations.JobRunner
 import wasichai.integrations.sdk.FieldValue
 import wasichai.integrations.sync.SyncTenant.Companion.call
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDate
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SyncEngineTest : SyncIntegrationTest() {
@@ -206,6 +208,77 @@ class SyncEngineTest : SyncIntegrationTest() {
             call(client, HttpMethod.POST, "/api/integrations/conflicts/${conflict.get("id").asString()}/resolve", tenant.admin, mapOf("choice" to "A"), 200)
         assertEquals("RESOLVED", resolved.get("status").asString())
         assertEquals(text("Ana from A"), field(memB, pair.b, inB, "name"))
+        val after = sync(definition)
+        assertEquals(0, after.get("conflicts").asInt(), after.toString())
+    }
+
+    @Test
+    fun `a per-field resolution brings B's values back through the inverse transforms`() {
+        val pair = Pair()
+        val tiers = mapOf("type" to "enumMap", "map" to mapOf("gold" to "GOLD", "silver" to "SILVER", "bronze" to "BRONZE"))
+        val dates = mapOf("type" to "dateTime", "zone" to "UTC", "a" to "DATE", "b" to "DATETIME")
+        val ana =
+            memA.put(
+                pair.a,
+                res,
+                mapOf("name" to text("Ana"), "tier" to FieldValue.Choice("gold"), "since" to FieldValue.Date(LocalDate.parse("2026-01-01")))
+            )
+        val definition =
+            define(
+                pair,
+                listOf(
+                    mapping("name"),
+                    mapOf("aField" to "tier", "bField" to "tier", "transform" to tiers),
+                    mapOf("aField" to "since", "bField" to "seenAt", "transform" to dates)
+                )
+            )
+        sync(definition)
+        val inB = memB.records(pair.b, res).single().id
+        assertEquals(FieldValue.Choice("GOLD"), field(memB, pair.b, inB, "tier"))
+        assertEquals(FieldValue.DateTime(Instant.parse("2026-01-01T00:00:00Z")), field(memB, pair.b, inB, "seenAt"))
+        memA.put(
+            pair.a,
+            res,
+            mapOf("name" to text("Ana A"), "tier" to FieldValue.Choice("silver"), "since" to FieldValue.Date(LocalDate.parse("2026-02-01"))),
+            ana
+        )
+        memB.put(
+            pair.b,
+            res,
+            mapOf("name" to text("Ana B"), "tier" to FieldValue.Choice("BRONZE"), "seenAt" to FieldValue.DateTime(Instant.parse("2026-03-01T10:00:00Z"))),
+            inB
+        )
+        assertEquals(1, sync(definition).get("conflicts").asInt())
+        val conflict = conflicts(definition).single().get("id").asString()
+        val picks = mapOf("name->name" to "A", "tier->tier" to "B", "since->seenAt" to "B")
+        // a pick that is neither side names the field
+        val problem =
+            call(
+                client,
+                HttpMethod.POST,
+                "/api/integrations/conflicts/$conflict/resolve",
+                tenant.admin,
+                mapOf("choice" to "CUSTOM", "fields" to picks + ("tier->tier" to "C")),
+                400
+            )
+        assertEquals(
+            "fields.tier->tier",
+            problem
+                .get("errors")
+                .get(0)
+                .get("field")
+                .asString(),
+            problem.toString()
+        )
+        val resolved =
+            call(client, HttpMethod.POST, "/api/integrations/conflicts/$conflict/resolve", tenant.admin, mapOf("choice" to "CUSTOM", "fields" to picks), 200)
+        assertEquals("RESOLVED", resolved.get("status").asString())
+        assertEquals(text("Ana A"), field(memB, pair.b, inB, "name"))
+        assertEquals(FieldValue.Choice("bronze"), field(memA, pair.a, ana, "tier"))
+        assertEquals(FieldValue.Choice("BRONZE"), field(memB, pair.b, inB, "tier"))
+        assertEquals(FieldValue.Date(LocalDate.parse("2026-03-01")), field(memA, pair.a, ana, "since"))
+        // B's date-time is the one A now holds, as B stores it
+        assertEquals(FieldValue.DateTime(Instant.parse("2026-03-01T00:00:00Z")), field(memB, pair.b, inB, "seenAt"))
         val after = sync(definition)
         assertEquals(0, after.get("conflicts").asInt(), after.toString())
     }

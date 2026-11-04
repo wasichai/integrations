@@ -163,9 +163,10 @@ open class MemConnector(
             listOf(
                 FieldDescriptor("name", "Name", FieldType.TEXT, required = true),
                 FieldDescriptor("email", "Email", FieldType.TEXT),
-                FieldDescriptor("tier", "Tier", FieldType.CHOICE, options = listOf("gold", "silver", "GOLD", "SILVER")),
+                FieldDescriptor("tier", "Tier", FieldType.CHOICE, options = listOf("gold", "silver", "bronze", "GOLD", "SILVER", "BRONZE")),
                 FieldDescriptor("amount", "Amount", FieldType.NUMBER),
                 FieldDescriptor("since", "Since", FieldType.DATE),
+                FieldDescriptor("seenAt", "Seen at", FieldType.DATETIME),
                 FieldDescriptor("computed", "Computed", FieldType.TEXT, readOnly = true),
                 // an upsert key, and a plain text field that can carry a create token
                 FieldDescriptor("extId", "External id", FieldType.TEXT, externalId = true),
