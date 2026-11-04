@@ -55,7 +55,11 @@ class SyncMonitoringTest : SyncIntegrationTest() {
                 "b" to mapOf("connectionId" to pair.b, "resource" to res),
                 "direction" to direction,
                 "deletePolicy" to deletePolicy,
-                "mappings" to listOf(mapOf("aField" to "name", "bField" to "name"), mapOf("aField" to "email", "bField" to "email"))
+                // a one-way definition needs the source to own every field (validation): BOTH only when bidirectional
+                "mappings" to
+                    listOf("name", "email").map { field ->
+                        mapOf("aField" to field, "bField" to field, "owner" to owner(direction))
+                    }
             )
         scheduleSeconds?.let { body["scheduleSeconds"] = it }
         reconcileSeconds?.let { body["reconcileSeconds"] = it }
@@ -63,6 +67,13 @@ class SyncMonitoringTest : SyncIntegrationTest() {
         call(client, HttpMethod.POST, "/api/integrations/sync-definitions/$id/activate", tenant.admin, null, 200)
         return id
     }
+
+    private fun owner(direction: String): String =
+        when (direction) {
+            "A_TO_B" -> "A"
+            "B_TO_A" -> "B"
+            else -> "BOTH"
+        }
 
     private fun run(definition: String): JsonNode {
         val runs = call(client, HttpMethod.GET, "/api/integrations/sync-definitions/$definition/runs", tenant.admin, null, 200)
