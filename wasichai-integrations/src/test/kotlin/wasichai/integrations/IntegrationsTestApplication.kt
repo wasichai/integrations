@@ -14,4 +14,10 @@ class IntegrationsTestApplication {
 
     @Bean
     fun testKeyConnector(): Connector = TestConnectors.apiKey()
+
+    @Bean
+    fun stubOauthConnector(): Connector = StubProvider.oauth()
+
+    @Bean
+    fun stubKeyConnector(): Connector = StubProvider.apiKey()
 }

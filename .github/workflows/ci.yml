@@ -57,6 +57,10 @@ jobs:
         run: docker pull -q postgres:18
       - name: Integration tests
         run: ./gradlew integrationTest --no-daemon --max-workers=2
+      # report artifacts are not always reachable: put the server side of a failure in the log
+      - name: Server errors of the run
+        if: failure()
+        run: grep -rh -A30 "Unhandled error" --include="*.xml" . | head -400 || true
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
