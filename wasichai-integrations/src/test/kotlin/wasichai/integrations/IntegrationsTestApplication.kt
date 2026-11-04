@@ -20,4 +20,7 @@ class IntegrationsTestApplication {
 
     @Bean
     fun stubKeyConnector(): Connector = StubProvider.apiKey()
+
+    @Bean
+    fun recordingJobs(): RecordingJobs = RecordingJobs()
 }

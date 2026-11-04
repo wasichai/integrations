@@ -16,3 +16,8 @@ class Transactions(
 
     suspend fun <T> run(block: suspend () -> T): T = operator.executeAndAwait { block() }
 }
+
+// the app's meter registry when it has one (actuator), a private one otherwise: code never checks
+class IntegrationsMeters(
+    val registry: io.micrometer.core.instrument.MeterRegistry
+)

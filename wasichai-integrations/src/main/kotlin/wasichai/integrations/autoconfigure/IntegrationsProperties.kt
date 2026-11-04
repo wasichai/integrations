@@ -12,8 +12,20 @@ data class IntegrationsProperties(
     val publicBaseUrl: String? = null,
     val encryption: Encryption = Encryption(),
     val oauth: OAuth = OAuth(),
-    val http: Http = Http()
+    val http: Http = Http(),
+    val jobs: Jobs = Jobs()
 ) {
+    data class Jobs(
+        // off on a replica that must only serve the api
+        val workerEnabled: Boolean = true,
+        val pollInterval: Duration = Duration.ofSeconds(1),
+        val batch: Int = 20,
+        // a job still RUNNING after this is taken to have lost its worker
+        val lease: Duration = Duration.ofMinutes(5),
+        val backoff: Duration = Duration.ofSeconds(30),
+        val maxBackoff: Duration = Duration.ofHours(1)
+    )
+
     data class Encryption(
         // key id -> base64 of 32 random bytes (AES-256). old ids stay listed while rows still use them
         val keys: Map<String, String> = emptyMap(),
