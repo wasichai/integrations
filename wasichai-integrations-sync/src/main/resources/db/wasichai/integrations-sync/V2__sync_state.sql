@@ -66,7 +66,8 @@ CREATE TABLE ${metadataSchema}.integration_sync_conflicts (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id uuid NOT NULL REFERENCES ${metadataSchema}.organizations (id) ON DELETE CASCADE,
     definition_id   uuid NOT NULL REFERENCES ${metadataSchema}.integration_sync_definitions (id) ON DELETE CASCADE,
-    link_id         uuid NOT NULL REFERENCES ${metadataSchema}.integration_record_links (id) ON DELETE CASCADE,
+    -- a resolved conflict outlives its link (a DELETED resolution forgets the pair): it is history
+    link_id         uuid REFERENCES ${metadataSchema}.integration_record_links (id) ON DELETE SET NULL,
     kind            text NOT NULL,
     -- [{"key", "aField", "bField", "a", "b", "base"}]
     fields          jsonb NOT NULL DEFAULT '[]'::jsonb,

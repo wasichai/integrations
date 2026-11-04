@@ -67,7 +67,8 @@ data class SyncRunView(
 data class ConflictView(
     val id: UUID,
     val definitionId: UUID,
-    val linkId: UUID,
+    // null once the pair was forgotten (a resolved DELETED conflict)
+    val linkId: UUID?,
     val kind: ConflictKind,
     val fields: JsonNode,
     val status: ConflictStatus,
@@ -288,7 +289,7 @@ class SyncRunRepository(
         ConflictView(
             row.uuid("id")!!,
             row.uuid("definition_id")!!,
-            row.uuid("link_id")!!,
+            row.uuid("link_id"),
             ConflictKind.valueOf(row.text("kind")!!),
             json.readTree(row.text("fields") ?: "[]"),
             ConflictStatus.valueOf(row.text("status")!!),

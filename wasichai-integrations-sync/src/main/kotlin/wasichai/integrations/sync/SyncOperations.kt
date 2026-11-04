@@ -94,23 +94,25 @@ class SyncOperationsService(
         val user = access.manager()
         val conflict = runs.conflict(user.organizationId, id) ?: throw NotFoundException("Conflict $id not found")
         if (conflict.status == ConflictStatus.RESOLVED) throw ConflictException("Conflict $id is already resolved")
-        val link = state.find(user.organizationId, conflict.linkId) ?: throw NotFoundException("Conflict $id has no link anymore")
+        val link =
+            conflict.linkId?.let { state.find(user.organizationId, it) } ?: throw NotFoundException("Conflict $id has no link anymore")
         val now = clock.instant()
-        if (conflict.kind == ConflictKind.DELETED) {
-            // the record is gone on one side: resolving forgets the pair
-            state.delete(link.id)
-        } else {
-            val definition = definitions.find(user.organizationId, conflict.definitionId) ?: throw NotFoundException("Sync definition not found")
-            val choice =
+        val choice =
+            if (conflict.kind == ConflictKind.DELETED) {
+                null
+            } else {
                 when (request.choice?.uppercase()) {
                     "A" -> Side.A
                     "B" -> Side.B
                     "CUSTOM" -> null
                     else -> throw ValidationException("Invalid resolution", "choice", "A, B or CUSTOM")
                 }
+            }
+        if (conflict.kind != ConflictKind.DELETED) {
+            val definition = definitions.find(user.organizationId, conflict.definitionId) ?: throw NotFoundException("Sync definition not found")
             engine.applyResolution(definition, link, conflict, choice, request.values)
         }
-        val resolution = JsonNodeFactory.instance.objectNode().put("choice", request.choice ?: "UNLINK")
+        val resolution = JsonNodeFactory.instance.objectNode().put("choice", if (conflict.kind == ConflictKind.DELETED) "UNLINK" else request.choice)
         if (request.values.isNotEmpty()) {
             resolution.set(
                 "values",
@@ -121,7 +123,9 @@ class SyncOperationsService(
                 }
             )
         }
+        // the conflict is closed first: forgetting the pair afterwards keeps it as history (link_id becomes null)
         if (!runs.resolve(id, resolution, user.userId, now)) throw ConflictException("Conflict $id was resolved meanwhile")
+        if (conflict.kind == ConflictKind.DELETED) state.delete(link.id)
         return runs.conflict(user.organizationId, id)!!
     }
 
