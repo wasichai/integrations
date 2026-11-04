@@ -1,0 +1,50 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GITHUB_ACTOR: ${{ github.actor }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # reading the wasichai-* packages; wins over GITHUB_TOKEN (settings.gradle.kts)
+  WASICHAI_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+
+jobs:
+  # the guard runs before the upload: a failed guard blocks it, so a release never publishes the wrong set
+  guards:
+    name: Release guard (Maven)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Release guard (Maven)
+        run: |
+          ./gradlew publishToMavenLocal --no-daemon -Pversion="${GITHUB_REF_NAME#v}" -Dmaven.repo.local="$RUNNER_TEMP/m2"
+          .github/scripts/check-maven-publications.sh "$RUNNER_TEMP/m2"
+
+  maven:
+    name: Maven modules
+    needs: guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      # wasichai.publishing targets maven.pkg.github.com/$GITHUB_REPOSITORY = wasichai/integrations.
+      # publishing uses GITHUB_TOKEN (packages: write); reading wasichai-* still needs PACKAGES_TOKEN
+      - name: Publish to GitHub Packages
+        run: ./gradlew publish --no-daemon -Pversion="${GITHUB_REF_NAME#v}"

@@ -47,6 +47,7 @@ Reading GitHub Packages needs `WASICHAI_PACKAGES_TOKEN` (or `GITHUB_TOKEN`) with
 ## Where things are
 
 - Product: [docs/product/](docs/product/) · Architecture: [docs/architecture/](docs/architecture/) · ADRs: [docs/adr/](docs/adr/)
+- Releasing: [docs/development/releasing.md](docs/development/releasing.md)
 
 ## Definition of Done
 
