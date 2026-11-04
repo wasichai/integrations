@@ -186,6 +186,31 @@ class SyncEngineTest : SyncIntegrationTest() {
     }
 
     @Test
+    fun `a write that keeps losing the race is held as a conflict a person can resolve`() {
+        val pair = Pair()
+        val ana = memA.put(pair.a, res, mapOf("name" to text("Ana"), "email" to text("ana@x.test")))
+        val definition = define(pair)
+        sync(definition)
+        val inB = memB.records(pair.b, res).single().id
+        memA.put(pair.a, res, mapOf("name" to text("Ana from A")), ana)
+        memB.conflictNextUpdates(2)
+        val run = sync(definition)
+        assertEquals(1, run.get("conflicts").asInt(), run.toString())
+        assertEquals(text("Ana"), field(memB, pair.b, inB, "name"))
+        val conflict = conflicts(definition).single()
+        val held = conflict.get("fields").get(0)
+        assertEquals("name->name", held.get("key").asString())
+        assertEquals("name", held.get("aField").asString())
+        assertEquals("name", held.get("bField").asString())
+        val resolved =
+            call(client, HttpMethod.POST, "/api/integrations/conflicts/${conflict.get("id").asString()}/resolve", tenant.admin, mapOf("choice" to "A"), 200)
+        assertEquals("RESOLVED", resolved.get("status").asString())
+        assertEquals(text("Ana from A"), field(memB, pair.b, inB, "name"))
+        val after = sync(definition)
+        assertEquals(0, after.get("conflicts").asInt(), after.toString())
+    }
+
+    @Test
     fun `a custom resolution writes the given value to both sides`() {
         val pair = Pair()
         val ana = memA.put(pair.a, res, mapOf("name" to text("Ana")))

@@ -589,13 +589,7 @@ class SyncEngine(
                 } catch (e: ConnectorException.Conflict) {
                     // it moved between our read and our write: read again and merge once more, then a person decides
                     if (attempt == 1) {
-                        hold(
-                            link,
-                            plan.writes.values
-                                .flatMap { it.keys }
-                                .distinct()
-                                .map { ConflictField(it, it, it, FieldValue.Null, FieldValue.Null, null) }
-                        )
+                        hold(link, contested(plan, a, b, snapshot))
                         return
                     }
                     s = read(source, s.id) ?: return deleted(source, s.id)
@@ -608,6 +602,29 @@ class SyncEngine(
                 counts.updated++
                 return
             }
+        }
+
+        // the mappings we tried to write, keyed like MergePlanner's conflicts so resolve finds them
+        private fun contested(
+            plan: MergePlan,
+            a: ProviderRecord,
+            b: ProviderRecord,
+            snapshot: Map<String, Agreed>?
+        ): List<ConflictField> {
+            val toA = plan.writes[Side.A].orEmpty().keys
+            val toB = plan.writes[Side.B].orEmpty().keys
+            return definition.mappings
+                .filter { it.aField in toA || it.bField in toB }
+                .map { m ->
+                    ConflictField(
+                        m.key,
+                        m.aField!!,
+                        m.bField!!,
+                        a.fields[m.aField] ?: FieldValue.Null,
+                        b.fields[m.bField] ?: FieldValue.Null,
+                        snapshot?.get(m.key)
+                    )
+                }
         }
 
         // nothing is written for a pair with a conflict until a person resolves it

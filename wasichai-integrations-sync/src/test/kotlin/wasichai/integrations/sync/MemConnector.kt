@@ -126,6 +126,13 @@ open class MemConnector(
 
     fun dieAfterNextCreate() = dieAfterCreate.set(true)
 
+    // a writer racing ours: the next n conditional updates find the record moved on
+    private val racing =
+        java.util.concurrent.atomic
+            .AtomicInteger()
+
+    fun conflictNextUpdates(n: Int) = racing.set(n)
+
     protected fun created(id: String) {
         if (dieAfterCreate.getAndSet(false)) throw IllegalStateException("process died after the provider created $id")
     }
@@ -212,7 +219,7 @@ open class MemConnector(
         expectedVersion: String?
     ): wasichai.integrations.sdk.WriteResult {
         val current = table(context.connectionId, resource)[id]?.takeUnless { it.deleted } ?: throw ConnectorException.NotFound("no record $id")
-        if (expectedVersion != null && expectedVersion != current.version.toString()) {
+        if (expectedVersion != null && (racing.getAndUpdate { maxOf(0, it - 1) } > 0 || expectedVersion != current.version.toString())) {
             throw ConnectorException.Conflict("record $id moved on", current.version.toString())
         }
         count(context)
