@@ -24,7 +24,7 @@ class ProviderConfigApiTest : IntegrationsIntegrationTest() {
     private val tenant by lazy { TestTenant.provision(client) }
     private val other by lazy { TestTenant.provision(client) }
 
-    private fun storedSecret(): String? =
+    private fun storedSecret(tenant: TestTenant): String? =
         runBlocking {
             db
                 .sql("SELECT client_secret_sealed FROM ${schemas.metadata}.integration_provider_configs WHERE organization_id = :org")
@@ -47,6 +47,8 @@ class ProviderConfigApiTest : IntegrationsIntegrationTest() {
 
     @Test
     fun `a provider config keeps its secret sealed and never answers it`() {
+        // its own tenant: the other tests configure the same connector
+        val tenant = TestTenant.provision(client)
         val created =
             call(
                 client,
@@ -58,8 +60,8 @@ class ProviderConfigApiTest : IntegrationsIntegrationTest() {
             )
         assertTrue(created.get("clientSecretSet").asBoolean())
         assertFalse(created.toString().contains("very-secret-value"))
-        assertTrue(storedSecret()!!.startsWith("v1.it1."))
-        assertFalse(storedSecret()!!.contains("very-secret-value"))
+        assertTrue(storedSecret(tenant)!!.startsWith("v1.it1."))
+        assertFalse(storedSecret(tenant)!!.contains("very-secret-value"))
         val catalog = call(client, HttpMethod.GET, "/api/integrations/connectors/test-oauth", tenant.admin, null, 200)
         assertTrue(catalog.get("providerConfigured").asBoolean())
 
@@ -83,6 +85,7 @@ class ProviderConfigApiTest : IntegrationsIntegrationTest() {
 
     @Test
     fun `another tenant neither sees nor changes it`() {
+        val tenant = TestTenant.provision(client)
         call(client, HttpMethod.PUT, "/api/integrations/provider-configs/test-oauth", tenant.admin, mapOf("clientId" to "mine"), 200)
         val theirs = call(client, HttpMethod.GET, "/api/integrations/provider-configs", other.admin, null, 200)
         assertEquals(0, theirs.size())
