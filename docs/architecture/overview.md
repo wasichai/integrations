@@ -19,6 +19,7 @@ integrations-connector-salesforce ─► integrations-connector-sdk
 integrations-connector-jira ───────► integrations-connector-sdk
 integrations-connector-github ─────► integrations-connector-sdk
 integrations-connector-slack ──────► integrations-connector-sdk
+integrations-connector-openapi ────► integrations-connector-sdk
 integrations-connector-sdk-test ───► integrations-connector-sdk   (test scope only)
 starters/wasichai-spring-boot-starter-integrations(-sync)
 integrations-integration-tests (never published)

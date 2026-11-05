@@ -60,6 +60,10 @@ writes round-trip, error responses map to the right `ConnectorError`.
 - `integrations-connector-slack`: Slack by OAuth v2 (bot token, token rotation) or a bot token; channels the bot is in
   and their messages, cursor paging, a feed of new messages by `oldest` (edits and deletions through events), post, edit
   and delete as text, Events API deliveries verified by `X-Slack-Signature` ([ADR-0020](../adr/0020-slack-connector.md)).
+- `integrations-connector-openapi`: any REST API described by an OpenAPI 3 document (JSON or YAML) plus an explicit
+  mapping written in code: list/get/create/update/delete operations per resource, fields derived from the response
+  schema, page, cursor or next-url paging, an incremental feed on an updated-at field; capabilities only for what the
+  mapping provides, no webhooks, no actions ([ADR-0021](../adr/0021-openapi-connector.md)).
 
 ## Frontend (wasichai/integrations-ui)
 

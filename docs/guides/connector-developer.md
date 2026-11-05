@@ -17,6 +17,69 @@ The example below is a small made-up provider, "Tasks", that implements `Connect
 and [`TasksConnectorTest.kt`](../../integrations-connector-sdk-test/src/test/kotlin/wasichai/integrations/sdk/testing/guide/TasksConnectorTest.kt),
 which `./gradlew build` compiles and runs, so the guide stays true to the SDK.
 
+## When you don't need to write a connector: the OpenAPI connector
+
+When the provider publishes an OpenAPI 3 document and its records are plain JSON objects behind list and get
+operations, `integrations-connector-openapi` may be enough. The app writes the mapping in code (tenants never upload
+one) and declares the connector as a bean; the config is checked against the document when the bean is created and
+every problem is named in one `IllegalArgumentException`, so a wrong `operationId` fails the start, not a sync. This
+excerpt of
+[`OpenApiFixtures.kt`](../../integrations-connector-openapi/src/test/kotlin/wasichai/integrations/connector/openapi/OpenApiFixtures.kt)
+maps the petstore document of its tests:
+
+```kotlin
+        OpenApiConfig(
+            id = "petstore",
+            document = document,
+            securityScheme = "apiKey",
+            baseUrl = baseUrl,
+            rateLimit = RateLimitHint(requestsPerSecond = 5.0, burst = 10, scope = "connection"),
+            // this module's tests cover the mapping below against PetstoreStub
+            maturity = Maturity.TESTED,
+            resources =
+                listOf(
+                    OpenApiResource(
+                        name = "pet",
+                        label = "Pet",
+                        list = "listPets",
+                        get = "getPet",
+                        create = "createPet",
+                        update = "updatePet",
+                        delete = "deletePet",
+                        pagination = OpenApiPagination.Page(pageParam = "page", limitParam = "limit"),
+                        updatedAtField = "updated_at",
+                        updatedSinceParam = "updated_since"
+                    ),
+                    OpenApiResource(
+                        name = "owner",
+                        list = "listOwners",
+                        get = "getOwner",
+                        itemsField = "data",
+                        pagination = OpenApiPagination.Cursor(cursorField = "meta.next_cursor", cursorParam = "cursor", limitParam = "limit")
+                    ),
+```
+
+In the app: `@Bean fun petstore(): Connector = OpenApiConnector.of(config)`, with `document` read from a classpath
+resource. What the mapping gives:
+
+- **Auth** from `components.securitySchemes[securityScheme]`: an API key in a header, HTTP bearer, or OAuth 2
+  authorization code (scopes from the flow unless `scopes` narrows them, PKCE unless `pkce = false`). API keys in a
+  query or cookie, HTTP basic and other OAuth flows are refused: the platform cannot send them.
+- **Discovery**: the mapped resources; fields from the get operation's response schema (or the list items'), with
+  local `$ref`s and `allOf` resolved, `enum` strings as choices, `date`/`date-time` formats as dates, nested objects
+  and `oneOf`/`anyOf` as JSON. The id field and `readOnly` properties are read-only; `required` comes from the create
+  body.
+- **Reads**: get answers `null` on 404/410; list pages by `Page`, `Cursor`, `NextUrl` (a body field or the `Link`
+  header, followed only under the base url) or `None`.
+- **Change feed** when a resource has `updatedAtField` and `updatedSinceParam` (the parameter must keep records updated
+  *at or after* the instant). Deletions are not reported: reconciliation finds them.
+- **Writes** when a resource maps create, update or delete; an update with an expected version reads and compares the
+  updated-at field first. Nothing else is guessed: no webhooks, no actions, no account lookup (`AUTHENTICATION`).
+
+Capabilities are `IMPLEMENTED` until the app's own tests cover its mapping (`ConnectorContractTest` plus stub tests like
+this module's); then set `maturity = Maturity.TESTED`. When the API needs more (nested paths, custom error codes,
+webhooks, a composite id), write a connector. Decisions in [ADR-0021](../adr/0021-openapi-connector.md).
+
 ## 1. Read the provider's documentation first
 
 Before any code, collect from the provider's API reference: how an account authenticates, what a "record" is, how
