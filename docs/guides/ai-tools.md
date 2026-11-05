@@ -3,8 +3,9 @@
 An AI tool is one thing an agent may do in a connected system: a connector action (send a Slack message) or one record
 operation on one resource (read, list, create, update, upsert or delete a contact). A tenant administrator exposes each
 tool on purpose; nothing is a tool by default. The REST contract is [api.md › AI tools](../architecture/api.md#ai-tools);
-the reasoning is [ADR-0026](../adr/0026-ai-tools.md). The MCP endpoint that serves these tools to agents is
-[#44](https://github.com/wasichai/integrations/issues/44); it uses the same catalog and the same execution path.
+the reasoning is [ADR-0026](../adr/0026-ai-tools.md). Agents reach the same tools through the
+[MCP endpoint](#connect-an-mcp-client) ([ADR-0027](../adr/0027-mcp-endpoint.md)), which uses the same catalog and the
+same execution path.
 
 ## Install
 
@@ -96,6 +97,84 @@ A manager lists what waits: `GET /api/integrations/ai/executions?status=PENDING_
 `POST /executions/{id}/approve` (it runs once and answers with the result; a second approve is `409`) or
 `POST /executions/{id}/reject` with an optional `{"reason": "…"}`. If the tool was changed, disabled or deleted after the
 call, approving is refused: reject it and let the agent ask again.
+
+## Connect an MCP client
+
+`POST /api/integrations/mcp` speaks the Model Context Protocol, revision 2025-06-18, over streamable HTTP: stateless,
+one JSON-RPC message per POST, JSON answers (no event stream, no sessions, no batches). It adds no right: a client
+sees and calls exactly what its token may over REST, and its calls are executions like any other.
+
+**Authenticate** with a Wasichai Bearer token. For an agent, create a service account with a role the tools allow
+(`SUPPORT_AGENT`), then exchange its credentials:
+
+```http
+POST /api/auth/token
+Content-Type: application/json
+
+{"clientId": "…", "clientSecret": "…"}
+```
+
+and send the answer's `token` on every MCP request: `Authorization: Bearer <token>`. It is short-lived: fetch a new one
+when the endpoint answers `401`. MCP's OAuth discovery is not implemented, so configure the client with the header,
+for example:
+
+```json
+{
+  "mcpServers": {
+    "wasichai": {
+      "type": "http",
+      "url": "https://app.example.com/api/integrations/mcp",
+      "headers": {"Authorization": "Bearer ${WASICHAI_TOKEN}"}
+    }
+  }
+}
+```
+
+A browser-based client must also be allowed by origin (`wasichai.integrations.ai.mcp.allowed-origins`, see
+[deployment](deployment.md)); other clients send no `Origin`.
+
+**A session**, as the client sends it (headers `Content-Type: application/json`,
+`Accept: application/json, text/event-stream`, and after `initialize` `MCP-Protocol-Version: 2025-06-18`):
+
+```json
+→ {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+   "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "my-agent", "version": "1.0"}}}
+← {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18",
+   "capabilities": {"tools": {"listChanged": false}},
+   "serverInfo": {"name": "wasichai-integrations", "title": "Wasichai Integrations", "version": "…"}, "instructions": "…"}}
+
+→ {"jsonrpc": "2.0", "method": "notifications/initialized"}
+← 202, no body
+
+→ {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+← {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "find_contact", "description": "Read one CRM contact by its id.",
+   "inputSchema": {"type": "object", "properties": {"id": {"type": "string", "minLength": 1}}, "required": ["id"],
+   "additionalProperties": false},
+   "annotations": {"readOnlyHint": true, "destructiveHint": false, "openWorldHint": true}}]}}
+
+→ {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "find_contact", "arguments": {"id": "c-17"}}}
+← {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "{\"record\":{\"id\":\"c-17\",…}}"}],
+   "structuredContent": {"record": {"id": "c-17", "…": "…"}}, "isError": false,
+   "_meta": {"dev.wasichai/executionId": "3f2c…"}}}
+```
+
+**A tool that needs approval** does not run when called. The result is not an error; it says the call waits:
+
+```json
+← {"jsonrpc": "2.0", "id": 4, "result": {"content": [{"type": "text",
+   "text": "Execution 9b1e… of tool 'post_to_support' waits for a person's approval; it has not run. Its outcome: …"}],
+   "structuredContent": {"executionId": "9b1e…", "tool": "post_to_support", "status": "PENDING_APPROVAL",
+   "statusUrl": "/api/integrations/ai/executions/9b1e…"}, "isError": false}}
+```
+
+A manager approves or rejects it over REST (below); the agent reads the outcome with
+`GET /api/integrations/ai/executions/{id}` and the same token. Calling the tool again makes a second execution.
+
+**Failures and refusals.** A provider failure is a result with `isError: true` and the execution's `error` and
+`errorKind`, so the model can react. A call the policy refuses is a JSON-RPC error: `-32602` for an unknown tool or
+arguments that do not fit the schema (`data.errors[].field` such as `arguments.text`), `-32001` no allowed role,
+`-32002` disabled or connection not active, `-32003` over the rate limit (`data.retryAfter` in seconds). The full table
+is in [api.md › MCP endpoint](../architecture/api.md#mcp-endpoint).
 
 ## What is recorded
 

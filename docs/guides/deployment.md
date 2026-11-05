@@ -153,6 +153,12 @@ OAuth providers usually require it.
 | Property | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | `false` turns the AI tools module off; its routes answer `404`. On, it exposes nothing until a tenant administrator exposes a tool ([guide](ai-tools.md)) |
+| `mcp.enabled` | `true` | `false` removes the MCP endpoint `POST /api/integrations/mcp` (`404`); the REST tool routes stay |
+| `mcp.allowed-origins` | empty | browser origins that may call the MCP endpoint; any other `Origin` is `403`. Empty: no browser page may |
+| `mcp.page-size` | `100` | tools per `tools/list` page, 1–1000 |
+
+An origin in `mcp.allowed-origins` (`https://agent.example.com`) must pass `wasichai.web.cors-allowed-origin-patterns`
+too; MCP clients outside a browser send no `Origin`.
 
 AI tool rate limits are per replica (a token bucket per tool in each instance): n replicas admit up to n times a tool's
 `rateLimitPerMinute` until a cluster-wide budget lands ([#47](https://github.com/wasichai/integrations/issues/47)).

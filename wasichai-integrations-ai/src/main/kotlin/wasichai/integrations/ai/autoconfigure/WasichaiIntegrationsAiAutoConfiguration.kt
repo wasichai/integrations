@@ -4,7 +4,9 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import org.springframework.r2dbc.core.DatabaseClient
 import tools.jackson.databind.json.JsonMapper
 import wasichai.core.audit.AuditService
@@ -23,6 +25,8 @@ import wasichai.integrations.ai.ToolController
 import wasichai.integrations.ai.ToolExecutions
 import wasichai.integrations.ai.ToolRateLimits
 import wasichai.integrations.ai.ToolRepository
+import wasichai.integrations.ai.mcp.McpController
+import wasichai.integrations.ai.mcp.McpServer
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import java.time.Clock
 
@@ -93,4 +97,22 @@ class WasichaiIntegrationsAiAutoConfiguration {
         catalog: ToolCatalog,
         executions: ToolExecutions
     ): ToolController = ToolController(catalog, executions)
+
+    // the MCP endpoint (ADR-0027): an interface over the catalog and the one execution path, nothing of its own
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(prefix = "wasichai.integrations.ai.mcp", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    @EnableConfigurationProperties(McpProperties::class)
+    class Mcp {
+        @Bean
+        @ConditionalOnMissingBean
+        fun mcpServer(
+            catalog: ToolCatalog,
+            executions: ToolExecutions,
+            properties: McpProperties,
+            json: JsonMapper
+        ): McpServer = McpServer(json, properties.allowedOrigins, properties.pageSize, catalog::list, executions::execute)
+
+        @Bean
+        fun mcpController(server: McpServer): McpController = McpController(server)
+    }
 }
