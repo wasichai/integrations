@@ -2,6 +2,14 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Docs: guides for users, connector authors, sync, deployment and operations
+
+`docs/guides/` adds a user guide, a connector SDK reference, a step-by-step connector guide, a sync guide, a
+deployment guide (every `wasichai.integrations.*` property, key rotation, OAuth, webhooks, scaling) and an
+operations guide (health, jobs, events, rate limits, metrics, logs), indexed from `docs/README.md` and the root
+README (issue #31). The connector guide's example, `TasksConnector` with its contract test, is compiled and run in
+`integrations-connector-sdk-test`'s tests so it cannot drift from the SDK.
+
 ## 2026-11-04 — Sync: resolve a conflict field by field, through the inverse transform
 
 A `CUSTOM` resolution can pick a side per mapping (`fields: {"tier->tier": "B"}`) instead of typing every
