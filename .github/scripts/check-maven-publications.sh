@@ -14,6 +14,7 @@ integrations-connector-notion
 integrations-connector-salesforce
 integrations-connector-sdk
 integrations-connector-sdk-test
+integrations-connector-slack
 wasichai-integrations
 wasichai-integrations-sync
 wasichai-spring-boot-starter-integrations

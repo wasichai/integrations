@@ -37,7 +37,7 @@ The token needs `read:packages`. What each artifact brings:
 | `wasichai-spring-boot-starter-integrations` | the Wasichai starter plus `wasichai-integrations` (connections, OAuth, webhooks, events, jobs, health) |
 | `wasichai-spring-boot-starter-integrations-sync` | the above plus `wasichai-integrations-sync` (definitions, engine, scheduler, conflicts) |
 | `wasichai-integrations`, `wasichai-integrations-sync` | the modules alone, for an app that assembles Wasichai itself |
-| `integrations-connector-notion`, `integrations-connector-salesforce`, `integrations-connector-jira` | the shipped connectors (no Spring) |
+| `integrations-connector-notion`, `-salesforce`, `-jira`, `-github`, `-slack` | the shipped connectors (no Spring) |
 | `integrations-connector-sdk`, `integrations-connector-sdk-test` | for writing and testing connectors |
 
 Then declare the connectors you want as beans; adding a connector dependency registers nothing by itself
@@ -172,6 +172,9 @@ Connector specifics:
 - Salesforce: PKCE; default scopes `api refresh_token`; the token response's `instance_url` is kept with the connection.
 - Jira: OAuth 2.0 (3LO) with the app's client secret (no PKCE, no revocation); default scopes include
   `offline_access` for a refresh token. The site is found from the grant's accessible resources on use.
+- Slack: OAuth v2 with the app's client secret (no PKCE, no revocation); default bot scopes `channels:read`,
+  `groups:read`, `channels:history`, `groups:history`, `chat:write`. With token rotation on, the refresh token is used
+  like any other; a bot token (`xoxb-`) can be used instead of OAuth (`authType: API_KEY`), for a single workspace.
 
 ## Webhooks
 
@@ -181,7 +184,9 @@ Webhook endpoints need `public-base-url` too. A tenant administrator creates one
 verifies an endpoint by posting a token, which an administrator reads (`GET /webhook-endpoints/{id}/verification-token`)
 and pastes back at Notion; providers that show a signing secret at registration take it in the create body
 (`secret`). Deliveries larger than `webhooks.max-body-bytes` are refused. Salesforce has no webhook support in the
-connector: its changes are polled ([ADR-0014](../adr/0014-salesforce-change-capture.md)).
+connector: its changes are polled ([ADR-0014](../adr/0014-salesforce-change-capture.md)). For Slack, create the endpoint
+with the app's signing secret first, then paste its `url` as the Events API request url: Slack's `url_verification`
+challenge is answered by the endpoint ([ADR-0020](../adr/0020-slack-connector.md)).
 
 ## Workers, scheduler and scaling
 

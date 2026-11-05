@@ -25,3 +25,4 @@ supersedes it and says so in its status line.
 - [ADR-0017: Connectors are plain SDK libraries; the app declares their beans](0017-connectors-as-plain-libraries.md)
 - [ADR-0018: Deletions that cannot propagate, unchecked accounts and unreadable credentials are made visible](0018-silent-paths-become-visible.md)
 - [ADR-0019: GitHub connects by user token only, polls issues by fresh queries, and refuses deletes](0019-github-connector.md)
+- [ADR-0020: Slack connects as the workspace's bot, polls new messages only, and maps `ok:false` codes](0020-slack-connector.md)

@@ -57,6 +57,9 @@ writes round-trip, error responses map to the right `ConnectorError`.
   personal access token; repositories and their issues (pull requests left out), `Link` paging, a fresh-query feed on
   `updated_at`, issue create and edit (no delete in the REST API), webhooks verified by `X-Hub-Signature-256`
   ([ADR-0019](../adr/0019-github-connector.md)).
+- `integrations-connector-slack`: Slack by OAuth v2 (bot token, token rotation) or a bot token; channels the bot is in
+  and their messages, cursor paging, a feed of new messages by `oldest` (edits and deletions through events), post, edit
+  and delete as text, Events API deliveries verified by `X-Slack-Signature` ([ADR-0020](../adr/0020-slack-connector.md)).
 
 ## Frontend (wasichai/integrations-ui)
 
