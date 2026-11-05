@@ -81,7 +81,7 @@ class ToolExecutions(
         if (!mayCall(user, tool)) refuse("forbidden", ForbiddenException("Not allowed to call tool '$name'"))
         if (!tool.enabled) refuse("disabled", ConflictException("Tool '$name' is disabled"))
         val connection = activeConnection(tool)
-        limits.tryAcquire(tool.id.toString(), tool.rateLimitPerMinute)?.let {
+        limits.tryAcquire(ToolRateLimits.key(tool.organizationId, tool.id), tool.rateLimitPerMinute)?.let {
             refuse(
                 "rate_limited",
                 RetryLaterException("Tool '$name' is over its limit of ${tool.rateLimitPerMinute} calls a minute", it, status = HttpStatus.TOO_MANY_REQUESTS)

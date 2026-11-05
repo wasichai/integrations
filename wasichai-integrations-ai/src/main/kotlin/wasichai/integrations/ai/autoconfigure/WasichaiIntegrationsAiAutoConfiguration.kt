@@ -19,6 +19,7 @@ import wasichai.integrations.ConnectorContexts
 import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.IntegrationsAccess
 import wasichai.integrations.IntegrationsMeters
+import wasichai.integrations.RateBuckets
 import wasichai.integrations.RetentionTask
 import wasichai.integrations.SqlRetentionTask
 import wasichai.integrations.Transactions
@@ -31,6 +32,7 @@ import wasichai.integrations.ai.ToolRateLimits
 import wasichai.integrations.ai.ToolRepository
 import wasichai.integrations.ai.mcp.McpController
 import wasichai.integrations.ai.mcp.McpServer
+import wasichai.integrations.autoconfigure.IntegrationsProperties
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import java.time.Clock
 import java.time.Duration
@@ -61,7 +63,11 @@ class WasichaiIntegrationsAiAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun toolRateLimits(clock: Clock): ToolRateLimits = ToolRateLimits(clock)
+    fun toolRateLimits(
+        clock: Clock,
+        buckets: RateBuckets,
+        properties: IntegrationsProperties
+    ): ToolRateLimits = ToolRateLimits(clock, buckets.takeIf { properties.http.rateLimit.shared })
 
     @Bean
     @ConditionalOnMissingBean

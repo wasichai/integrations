@@ -102,7 +102,18 @@ stores nothing. A webhook endpoint becomes `ACTIVE` with its first accepted deli
   20 req/s, burst 20). A call waits for a token instead of failing.
 - A provider `429` with `Retry-After` pauses the connection until then; health shows it as `rateLimitedUntil`. The
   connector raises `RateLimited`, the sync run fails and its job retries after the requested delay.
-- Buckets and pauses live in memory per replica ([deployment](deployment.md#workers-scheduler-and-scaling)).
+- Buckets and pauses are shared by every replica in `integration_rate_buckets`
+  ([ADR-0030](../adr/0030-shared-rate-limits-and-kubernetes.md)): one upsert per provider call takes a token or
+  reserves the next one, and the call waits for its slot with a coroutine delay. `rateLimitedUntil` shows a pause
+  seen by any replica. AI tool limits use the same table and refuse with `429` instead of waiting.
+- **Fallback**: when the database does not answer a rate-limit statement within 1 s, or fails, that call is paced by
+  the replica's own in-memory bucket, `integrations.rate_limit.fallbacks` counts it, and the log says
+  `Shared rate limits unavailable (...)` once per outage and `Shared rate limits answer again` when it recovers.
+  Calls go on either way; while it lasts, n replicas may reach n times the rate. A pause is also kept in memory by the
+  replica that saw the `429`.
+- `wasichai.integrations.http.rate-limit.shared=false` keeps everything per replica, with no database work.
+- To clear a pause by hand (the provider said `Retry-After` but the limit is lifted):
+  `UPDATE <metadata schema>.integration_rate_buckets SET paused_until = NULL WHERE bucket_key = 'http:<connection id>'`.
 - Salesforce also enforces an org-wide rolling 24-hour API allocation that this pacing does not track.
 
 ## Retention
@@ -160,6 +171,8 @@ registry bean the module keeps them in a private `SimpleMeterRegistry`). Tags ne
 | Meter | Type | Tags | Records |
 |---|---|---|---|
 | `integrations.http.requests` | timer | `connector`, `method`, `status` (`2xx`, `4xx`, `5xx`…, or `io_error`) | every provider call through a connection |
+| `integrations.rate_limit.waits` | timer | `source` (`shared`, `paused`, `local`) | time a provider call waited for its token or a pause |
+| `integrations.rate_limit.fallbacks` | counter | `operation` (`reserve`, `try`, `pause`, `paused`, `forget`), `reason` (`timeout`, `error`) | rate-limit statements the database did not answer: limited per replica instead |
 | `integrations.jobs` | timer | `kind`, `outcome` (`succeeded`, `retry`, `dead`) | every job attempt |
 | `integrations.sync.runs` | counter | `kind` (trigger in lower case), `outcome` (`succeeded`, `partial`, `failed`) | every run attempt |
 | `integrations.sync.records` | counter | `outcome` (`created`, `updated`, `skipped`, `failed`) | records per outcome |
@@ -174,6 +187,7 @@ registry bean the module keeps them in a private `SimpleMeterRegistry`). Tags ne
 
 Useful alerts: `integrations.jobs{outcome="dead"}` increasing; `integrations.sync.runs{outcome="failed"}` increasing;
 `integrations.http.requests{status="4xx"}` (401/403/429 land there) or `io_error` rising for one connector;
+`integrations.rate_limit.fallbacks` increasing (the database is slow or away, limits are per replica);
 `integrations.sync.conflicts` rising after a change of mappings; `integrations.workflows.executions{outcome="failed"}`
 increasing.
 

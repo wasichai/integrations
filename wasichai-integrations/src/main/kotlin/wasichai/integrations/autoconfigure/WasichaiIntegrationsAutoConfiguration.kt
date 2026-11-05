@@ -51,6 +51,7 @@ import wasichai.integrations.PlatformHttp
 import wasichai.integrations.ProviderConfigController
 import wasichai.integrations.ProviderConfigRepository
 import wasichai.integrations.ProviderConfigService
+import wasichai.integrations.RateBuckets
 import wasichai.integrations.RateLimits
 import wasichai.integrations.Retention
 import wasichai.integrations.RetentionScheduler
@@ -198,7 +199,20 @@ class WasichaiIntegrationsAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun rateLimits(clock: Clock): RateLimits = RateLimits(clock)
+    fun rateBuckets(
+        db: DatabaseClient,
+        schemas: WasichaiSchemas,
+        meters: IntegrationsMeters
+    ): RateBuckets = RateBuckets(db, schemas, meters.registry)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun rateLimits(
+        clock: Clock,
+        buckets: RateBuckets,
+        properties: IntegrationsProperties,
+        meters: IntegrationsMeters
+    ): RateLimits = RateLimits(clock, buckets.takeIf { properties.http.rateLimit.shared }, meters.registry)
 
     @Bean
     @ConditionalOnMissingBean

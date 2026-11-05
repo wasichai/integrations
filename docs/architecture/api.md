@@ -598,7 +598,7 @@ operation), externalIdField?, inputSchema?, allowedRoles?, approvalRequired?, ra
   failure is mapped as above.
 - `allowedRoles` role names of the tenant (case-insensitive, stored upper case), at most 50; default empty: managers only.
 - `approvalRequired` default `true` for actions, create, update, upsert and delete, `false` for read and list.
-- `rateLimitPerMinute` 1–10000, default 60, per tool and per replica. `enabled` default `true`.
+- `rateLimitPerMinute` 1–10000, default 60, per tool across every replica (per replica with `http.rate-limit.shared=false`). `enabled` default `true`.
 
 Every violation is `400` with its field (`allowedRoles[0]`, `inputSchema.properties.x.pattern`).
 

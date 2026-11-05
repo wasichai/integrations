@@ -1,5 +1,6 @@
 package wasichai.integrations.ai
 
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -25,23 +26,25 @@ class ToolRateLimitsTest {
     private val limits = ToolRateLimits(clock)
 
     @Test
-    fun `a burst of the per-minute limit, then a refusal that says how long to wait`() {
-        repeat(3) { assertNull(limits.tryAcquire("t", 3)) }
-        val wait = limits.tryAcquire("t", 3)
-        assertNotNull(wait)
-        assertEquals(Duration.ofSeconds(20), wait)
-        clock.now = clock.now.plusSeconds(20)
-        assertNull(limits.tryAcquire("t", 3))
-        assertNotNull(limits.tryAcquire("t", 3))
-    }
+    fun `a burst of the per-minute limit, then a refusal that says how long to wait`() =
+        runBlocking {
+            repeat(3) { assertNull(limits.tryAcquire("t", 3)) }
+            val wait = limits.tryAcquire("t", 3)
+            assertNotNull(wait)
+            assertEquals(Duration.ofSeconds(20), wait)
+            clock.now = clock.now.plusSeconds(20)
+            assertNull(limits.tryAcquire("t", 3))
+            assertNotNull(limits.tryAcquire("t", 3))
+        }
 
     @Test
-    fun `tools are counted apart, and a changed limit starts afresh`() {
-        assertNull(limits.tryAcquire("a", 1))
-        assertNotNull(limits.tryAcquire("a", 1))
-        assertNull(limits.tryAcquire("b", 1))
-        assertNull(limits.tryAcquire("a", 2))
-        limits.forget("b")
-        assertNull(limits.tryAcquire("b", 1))
-    }
+    fun `tools are counted apart, and a changed limit starts afresh`() =
+        runBlocking {
+            assertNull(limits.tryAcquire("a", 1))
+            assertNotNull(limits.tryAcquire("a", 1))
+            assertNull(limits.tryAcquire("b", 1))
+            assertNull(limits.tryAcquire("a", 2))
+            limits.forget("b")
+            assertNull(limits.tryAcquire("b", 1))
+        }
 }

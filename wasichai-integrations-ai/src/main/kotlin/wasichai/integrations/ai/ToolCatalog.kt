@@ -96,7 +96,7 @@ class ToolCatalog(
                 }
             }
         if (!updated) throw PreconditionFailedException("Tool '$name' changed meanwhile")
-        limits.forget(existing.id.toString())
+        limits.forget(ToolRateLimits.key(existing.organizationId, existing.id))
         return view(repository.find(user.organizationId, existing.id)!!)
     }
 
@@ -108,7 +108,7 @@ class ToolCatalog(
             if (!repository.delete(user.organizationId, tool.id)) throw NotFoundException("Tool '$name' not found")
             audit.record(user.organizationId, user.userId, AUDIT_OBJECT, tool.id, AuditOperation.DELETE, before = view(tool))
         }
-        limits.forget(tool.id.toString())
+        limits.forget(ToolRateLimits.key(tool.organizationId, tool.id))
     }
 
     private suspend fun <T> unique(

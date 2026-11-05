@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import wasichai.core.platform.ModuleMigration
+import wasichai.integrations.autoconfigure.IntegrationsProperties
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import wasichai.test.WasichaiContextRunner
 import java.util.Base64
@@ -33,6 +34,27 @@ class WasichaiIntegrationsAutoConfigurationTest {
     fun `connector beans land in the registry`() {
         keyed().withBean("testConnector", wasichai.integrations.sdk.Connector::class.java, { TestConnectors.apiKey() }).run { context ->
             assertThat(context.getBean(ConnectorRegistry::class.java).all().map { it.manifest.id }).containsExactly("test-key")
+        }
+    }
+
+    @Test
+    fun `rate limits are shared by default, per replica when switched off`() {
+        keyed().run { context ->
+            assertThat(context).hasSingleBean(RateBuckets::class.java)
+            assertThat(
+                context
+                    .getBean(IntegrationsProperties::class.java)
+                    .http.rateLimit.shared
+            ).isTrue()
+        }
+        keyed().withPropertyValues("wasichai.integrations.http.rate-limit.shared=false").run { context ->
+            assertThat(context).hasNotFailed()
+            assertThat(
+                context
+                    .getBean(IntegrationsProperties::class.java)
+                    .http.rateLimit.shared
+            ).isFalse()
+            assertThat(context).hasSingleBean(RateLimits::class.java)
         }
     }
 
