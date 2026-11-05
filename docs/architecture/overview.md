@@ -13,7 +13,8 @@ wasichai-core (published by wasichai)
    ├── wasichai-integrations ──► integrations-connector-sdk
    │       ▲
    │       ├── wasichai-integrations-sync
-   │       └── wasichai-integrations-workflows
+   │       ├── wasichai-integrations-workflows
+   │       └── wasichai-integrations-ai
    │
 integrations-connector-notion ─────► integrations-connector-sdk
 integrations-connector-salesforce ─► integrations-connector-sdk
@@ -23,7 +24,7 @@ integrations-connector-github ─────► integrations-connector-sdk
 integrations-connector-slack ──────► integrations-connector-sdk
 integrations-connector-openapi ────► integrations-connector-sdk
 integrations-connector-sdk-test ───► integrations-connector-sdk   (test scope only)
-starters/wasichai-spring-boot-starter-integrations(-sync, -workflows)
+starters/wasichai-spring-boot-starter-integrations(-sync, -workflows, -ai)
 integrations-integration-tests (never published)
 ```
 
@@ -31,7 +32,7 @@ integrations-integration-tests (never published)
   connector. Provider names appear only in `integrations-connector-*`.
 - Each Spring module ships its auto-configuration, `wasichai.<module>.enabled` switch, properties and Flyway history
   (`db/wasichai/integrations`, order 200; `db/wasichai/integrations-sync`, order 210;
-  `db/wasichai/integrations-workflows`, order 220).
+  `db/wasichai/integrations-workflows`, order 220; `db/wasichai/integrations-ai`, order 230).
 
 ## Control plane and data plane
 

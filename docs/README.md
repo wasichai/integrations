@@ -1,6 +1,6 @@
 # Documentation
 
-- [Guides](guides/README.md): user guide, connector SDK and developer guide, synchronization, workflows, deployment, operations.
+- [Guides](guides/README.md): user guide, connector SDK and developer guide, synchronization, workflows, AI tools, deployment, operations.
 - [Architecture](architecture/): [overview](architecture/overview.md), [components](architecture/components.md),
   [REST API](architecture/api.md), [data model](architecture/data-model.md), [event model](architecture/event-model.md),
   [sync semantics](architecture/sync-semantics.md), [security model](architecture/security-model.md).

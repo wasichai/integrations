@@ -32,3 +32,4 @@ supersedes it and says so in its status line.
 - [ADR-0023: A token answer without a token that names an error is a refused grant](0023-token-refusals-in-ok-responses.md)
 - [ADR-0024: Salesforce Change Data Capture is a bounded pull over the Pub/Sub API, in its own module](0024-salesforce-cdc-pub-sub.md)
 - [ADR-0025: Workflow runs are rows, steps are jobs, joins count arrivals under the run's lock](0025-workflow-execution.md)
+- [ADR-0026: AI tools are explicitly exposed, sensitive by default, and run through one audited execution path](0026-ai-tools.md)

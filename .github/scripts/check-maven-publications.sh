@@ -18,9 +18,11 @@ integrations-connector-sdk
 integrations-connector-sdk-test
 integrations-connector-slack
 wasichai-integrations
+wasichai-integrations-ai
 wasichai-integrations-sync
 wasichai-integrations-workflows
 wasichai-spring-boot-starter-integrations
+wasichai-spring-boot-starter-integrations-ai
 wasichai-spring-boot-starter-integrations-sync
 wasichai-spring-boot-starter-integrations-workflows"
 
