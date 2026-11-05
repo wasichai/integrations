@@ -2,6 +2,21 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — MCP endpoint for exposed tools
+
+`POST /api/integrations/mcp` serves the exposed AI tools over the Model Context Protocol, revision 2025-06-18,
+streamable HTTP ([#44](https://github.com/wasichai/integrations/issues/44), ADR-0027), in `wasichai-integrations-ai`
+behind `wasichai.integrations.ai.mcp.enabled` (default on). Wasichai's Bearer JWT (a person's, or a service account's
+from `/api/auth/token`); stateless (no `Mcp-Session-Id`, no event stream: `GET`/`DELETE` `405`), no batches.
+`initialize` (version negotiation), `ping`, `tools/list` (the enabled tools the caller may call, paged by cursor) and
+`tools/call`, which is `ToolExecutions.execute` only: the same policy, execution rows and audit as REST. A provider
+failure is a result with `isError`; an approval-required call is a pending result with its execution id, read over
+REST. JSON-RPC errors `-32700`/`-32600` (HTTP `400`), `-32601`, `-32602` (unknown tool, arguments with field paths),
+`-32001` forbidden, `-32002` conflict, `-32003` rate limited (`retryAfter`). `Origin` is checked against
+`wasichai.integrations.ai.mcp.allowed-origins` (`403`), `MCP-Protocol-Version` (`400` when unsupported). No
+wasichai-agent registration: 1.10.0 has no tool registration API. REST change (additive): the MCP route. New tests:
+`McpServerTest`, `McpApiTest`, `McpDisabledTest`; `WasichaiIntegrationsAiAutoConfigurationTest` covers the switch.
+
 ## 2026-11-05 — AI tool catalog and execution policy
 
 New module `wasichai-integrations-ai` and starter `wasichai-spring-boot-starter-integrations-ai`

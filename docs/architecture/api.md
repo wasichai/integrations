@@ -3,7 +3,8 @@
 The contract with [integrations-ui](https://github.com/wasichai/integrations-ui), as the controllers implement it. Routes
 exist only when the module is on the classpath and `wasichai.integrations.enabled` (or `wasichai.integrations.sync.enabled`
 for the synchronization routes, `wasichai.integrations.workflows.enabled` for the workflow routes,
-`wasichai.integrations.ai.enabled` for the AI tool routes) is not false;
+`wasichai.integrations.ai.enabled` for the AI tool routes, also `wasichai.integrations.ai.mcp.enabled` for the MCP
+endpoint) is not false;
 otherwise they answer `404` to an authenticated caller, as in
 [Wasichai](https://github.com/wasichai/wasichai/blob/main/docs/api/rest.md).
 
@@ -516,8 +517,7 @@ A missing resource is a violation; any other provider failure is mapped as above
 
 Module `wasichai-integrations-ai` ([ADR-0026](../adr/0026-ai-tools.md)), base `/api/integrations/ai`. A tool is a
 connector action or one record operation that a tenant administrator exposed; nothing is exposed by default. Every
-execution, from here or from the MCP endpoint ([#44](https://github.com/wasichai/integrations/issues/44)), goes through
-the same policy and is recorded. Guide: [AI tools](../guides/ai-tools.md).
+execution, from here or from the [MCP endpoint](#mcp-endpoint), goes through the same policy and is recorded. Guide: [AI tools](../guides/ai-tools.md).
 
 | Method | Path | Perm | Answer |
 |---|---|---|---|
@@ -591,6 +591,56 @@ correlationId?, createdAt, startedAt?, finishedAt?}`. The answers of `execute` a
 
 `GET /ai/executions` filters `status`, `tool` (the name); pages newest first by `(createdAt, id)` with `limit` (1–200,
 default 50) and `cursor` (the previous page's `nextCursor`; `400` for any other value).
+
+### MCP endpoint
+
+[ADR-0027](../adr/0027-mcp-endpoint.md). `POST /api/integrations/mcp`: the Model Context Protocol, revision
+**2025-06-18**, streamable HTTP, stateless, JSON answers only. Bearer JWT like every route here (a person's, or a service
+account's from `/api/auth/token`); none or a bad one is `401`. Each POST body is one JSON-RPC 2.0 message (no batches).
+
+| Request | Answer |
+|---|---|
+| a request (`id`, `method`) | `200` `application/json`, one JSON-RPC response with the same `id` |
+| a notification (no `id`, e.g. `notifications/initialized`) or a client's JSON-RPC response | `202`, no body |
+| not JSON (`-32700`); not a JSON-RPC 2.0 object, a batch, a null id (`-32600`) | `400`, JSON-RPC error with `id: null` |
+| `MCP-Protocol-Version` present and not `2025-06-18` | `400`, `-32600` (absent is accepted) |
+| `Origin` present and not in `wasichai.integrations.ai.mcp.allowed-origins` | `403`, `-32001` |
+| `GET` or `DELETE` | `405`, `Allow: POST` (no event stream, no session) |
+
+No `Mcp-Session-Id` is issued; one sent is ignored.
+
+| Method | Params | Result |
+|---|---|---|
+| `initialize` | `{protocolVersion, capabilities?, clientInfo?}` | `{protocolVersion, capabilities: {tools: {listChanged: false}}, serverInfo, instructions}` |
+| `ping` | — | `{}` |
+| `tools/list` | `{cursor?}` | `{tools: [{name, description, inputSchema, annotations}], nextCursor?}` |
+| `tools/call` | `{name, arguments?}` | see below |
+
+`initialize` echoes the client's `protocolVersion` when it is `2025-06-18`, else answers `2025-06-18`; `serverInfo` is
+`{name: "wasichai-integrations", title, version}`. `tools/list` holds the enabled tools the caller may call, by name,
+`page-size` per page; `annotations` are `{readOnlyHint, destructiveHint, openWorldHint}`, hints only.
+Any other method is `-32601`; params that are not an object, or a missing `protocolVersion`, `name`, a non-object
+`arguments`, a cursor not issued here: `-32602`.
+
+`tools/call` runs `ToolExecutions.execute` (the policy of `POST /ai/tools/{name}/execute`, same execution row and audit).
+Every result carries `_meta: {"dev.wasichai/executionId": "<id>"}`.
+
+- Ran, `SUCCEEDED`: `{content: [{type: "text", text: "<output as JSON>"}], structuredContent: <output, when an object>, isError: false}`.
+- Ran, `FAILED` (the provider refused): `{content: [{type: "text", text: "{executionId, status, error, errorKind}"}], isError: true}`.
+- Waits for approval: `{content: [{type: "text", text: "Execution … waits for a person's approval …"}],
+  structuredContent: {executionId, tool, status: "PENDING_APPROVAL", statusUrl: "/api/integrations/ai/executions/<id>"},
+  isError: false}`. The outcome is read with `GET /ai/executions/{id}`; a manager approves over REST.
+
+Refusals are JSON-RPC errors (HTTP `200`):
+
+| Policy | Error |
+|---|---|
+| no such tool in the caller's tenant | `-32602` `Unknown tool: <name>` |
+| arguments do not fit the schema | `-32602`, `data: {errors: [{field: "arguments.fields.name", message}]}` |
+| no allowed role | `-32001` |
+| disabled tool, connection not active | `-32002` |
+| over the rate limit | `-32003`, `data: {retryAfter: <seconds>}` |
+| unexpected | `-32603` |
 
 ## Not implemented yet
 
