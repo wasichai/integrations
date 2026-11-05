@@ -18,10 +18,14 @@ import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.IntegrationsAccess
 import wasichai.integrations.IntegrationsMeters
 import wasichai.integrations.JobRepository
+import wasichai.integrations.RetentionTask
+import wasichai.integrations.SqlRetentionTask
 import wasichai.integrations.Transactions
+import wasichai.integrations.UsageMeter
 import wasichai.integrations.autoconfigure.IntegrationsProperties
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import wasichai.integrations.workflows.ExecutionRepository
+import wasichai.integrations.workflows.WorkflowConnectionData
 import wasichai.integrations.workflows.WorkflowController
 import wasichai.integrations.workflows.WorkflowEngine
 import wasichai.integrations.workflows.WorkflowEventTrigger
@@ -32,6 +36,7 @@ import wasichai.integrations.workflows.WorkflowService
 import wasichai.integrations.workflows.WorkflowValidator
 import wasichai.integrations.workflows.WorkflowWebhookController
 import java.time.Clock
+import java.time.Duration
 
 // integration workflows (ADR-0022, ADR-0025): definitions, immutable versions, validation and execution on the
 // integrations job queue. needs the integrations module and its tables; it does not need the sync module
@@ -98,8 +103,35 @@ class WasichaiIntegrationsWorkflowsAutoConfiguration {
         integrationsTransactions: Transactions,
         meters: IntegrationsMeters,
         properties: WorkflowsProperties,
-        clock: Clock
-    ): WorkflowEngine = WorkflowEngine(workflows, executions, registry, connections, contexts, jobs, integrationsTransactions, meters, properties, clock)
+        clock: Clock,
+        usage: UsageMeter
+    ): WorkflowEngine = WorkflowEngine(workflows, executions, registry, connections, contexts, jobs, integrationsTransactions, meters, properties, clock, usage)
+
+    // GDPR export and erasure of a connection (ADR-0029): the workflows naming it and their runs
+    @Bean
+    @ConditionalOnMissingBean
+    fun workflowConnectionData(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): WorkflowConnectionData = WorkflowConnectionData(db, json, schemas)
+
+    // retention (ADR-0029): finished runs only, with their steps (cascade); a waiting approval is never purged
+    @Bean
+    fun workflowExecutionsRetention(
+        db: DatabaseClient,
+        schemas: WasichaiSchemas
+    ): RetentionTask {
+        val m = schemas.metadata
+        return SqlRetentionTask(
+            "workflows.executions",
+            "integration_workflow_executions",
+            Duration.ofDays(90),
+            db,
+            "DELETE FROM $m.integration_workflow_executions WHERE id IN (SELECT id FROM $m.integration_workflow_executions " +
+                "WHERE status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND finished_at < :cutoff ORDER BY finished_at LIMIT :limit FOR UPDATE SKIP LOCKED)"
+        )
+    }
 
     // an IntegrationEventListener bean: EventJobs hands it every event
     @Bean

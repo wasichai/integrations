@@ -14,8 +14,51 @@ data class IntegrationsProperties(
     val oauth: OAuth = OAuth(),
     val http: Http = Http(),
     val jobs: Jobs = Jobs(),
-    val webhooks: Webhooks = Webhooks()
+    val webhooks: Webhooks = Webhooks(),
+    val retention: Retention = Retention(),
+    val usage: Usage = Usage(),
+    val export: Export = Export()
 ) {
+    // ADR-0029: purge of finished history. each module's task has a name and a default age; max-age overrides it by
+    // name (events, jobs, usage, sync.runs, sync.conflicts, workflows.executions, ai.executions), 0 keeps forever
+    data class Retention(
+        // the scheduler; off, nothing is purged automatically
+        val enabled: Boolean = true,
+        val interval: Duration = Duration.ofHours(1),
+        val initialDelay: Duration = Duration.ofMinutes(5),
+        // rows per DELETE: short statements, short locks
+        val batchSize: Int = 1000,
+        // batches per task and tick; the next tick goes on
+        val maxBatches: Int = 100,
+        val maxAge: Map<String, Duration> = emptyMap()
+    ) {
+        init {
+            require(batchSize in 1..100_000) { "retention.batch-size must be within 1..100000" }
+            require(maxBatches >= 1) { "retention.max-batches must be at least 1" }
+            require(interval.isPositive) { "retention.interval must be positive" }
+            require(!initialDelay.isNegative) { "retention.initial-delay must not be negative" }
+        }
+    }
+
+    data class Usage(
+        // how long counts wait in memory before they are written; a crash loses at most this much
+        val flushInterval: Duration = Duration.ofSeconds(30)
+    ) {
+        init {
+            require(flushInterval.isPositive) { "usage.flush-interval must be positive" }
+        }
+    }
+
+    data class Export(
+        // rows per section in one page of a connection's export
+        val pageSize: Int = 200,
+        val maxPageSize: Int = 1000
+    ) {
+        init {
+            require(pageSize in 1..maxPageSize) { "export.page-size must be within 1..export.max-page-size" }
+        }
+    }
+
     data class Webhooks(
         // a bigger delivery is refused before any parsing (413)
         val maxBodyBytes: Int = 1024 * 1024

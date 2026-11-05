@@ -17,7 +17,9 @@ import java.util.UUID
         "wasichai.integrations.jobs.worker-enabled=false",
         "wasichai.integrations.sync.scheduler-enabled=false",
         "wasichai.integrations.jobs.backoff=1ms",
-        "wasichai.integrations.jobs.max-backoff=1ms"
+        "wasichai.integrations.jobs.max-backoff=1ms",
+        // tests call the purge themselves
+        "wasichai.integrations.retention.enabled=false"
     ]
 )
 abstract class SyncIntegrationTest : WasichaiIntegrationTest()

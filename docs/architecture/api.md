@@ -105,6 +105,9 @@ replace without `If-Match` or with a stale version, `409` a concurrent create wo
 | POST | `/connections` | M | `201` `ConnectionView` (API key, basic, client credentials) |
 | GET | `/connections/{id}` | R | `200` `ConnectionView`; `404` |
 | DELETE | `/connections/{id}` | M | `204`; `404`; `409` while something uses it |
+| GET | `/connections/{id}/export` | M | `200` `ConnectionExport`, paged by `page` (0) and `size`; `400`; `404` |
+| POST | `/connections/{id}/erase` | M | `200` `ErasureView`; `404`. Works while used |
+| POST | `/connections/{id}/erase-record` | M | `200` `ErasureView`; `400`; `404` |
 | POST | `/connections/{id}/test` | M | `200` `ConnectionTestView`; `404` |
 | POST | `/connections/oauth/start` | M | `200` `{authorizationUrl, expiresAt}` |
 | GET | `/oauth/callback` | P | `302` to the configured return url |
@@ -145,10 +148,44 @@ inside a `200`); a `2xx` with neither is a malformed answer, a permanent failure
 on the run and the definition's status.
 
 `DELETE` answers `409` naming what still uses the connection (each sync definition, in any status, with a side on
-it; each workflow whose draft or published version names it); nothing is revoked or deleted then, so no link, run or
-open conflict disappears with it. Otherwise it revokes the token at the provider when the connector declares a revoke
+it; each workflow whose draft or published version names it; each AI tool on it); nothing is revoked or deleted then,
+so no link, run or open conflict disappears with it (`POST /connections/{id}/erase` deletes it with all of that,
+below). Otherwise it revokes the token at the provider when the connector declares a revoke
 url (best effort), then deletes. `test` is a manager's action because it calls the provider and changes the
 connection's status and health.
+
+### GDPR export and erasure
+
+[ADR-0029](../adr/0029-retention-gdpr-usage.md). Every module adds what it keeps for the connection; a module that is
+off adds nothing.
+
+`GET /connections/{id}/export?page=0&size=200`: `ConnectionExport` `{connectionId, exportedAt, page, size, hasMore,
+connection: ConnectionView, credentials: CredentialFlags, sections: {name: [row]}}`. Each section holds up to `size` rows
+(1 to `wasichai.integrations.export.max-page-size`, 1000; default `export.page-size`, 200) in a stable order; ask
+`page + 1` while `hasMore`. A row is the stored row as JSON, column names in snake_case. No secret is exported:
+`CredentialFlags` is `{stored, readable, accessToken, refreshToken, apiKey, username, password, accessExpiresAt?}`
+(booleans: whether each secret is set; `readable: false` when no configured key opens them), a webhook endpoint carries
+`secret_set` instead of its sealed secret, a workflow `webhook_token_set` instead of the token's hash. Sections:
+`webhookEndpoints`, `events`; with sync `syncDefinitions` (either side on the connection), `recordLinks`,
+`recordSnapshots`, `syncCursors`, `syncRuns`, `syncConflicts`; with workflows `workflows` (draft, any version or trigger
+naming the connection), `workflowVersions`, `workflowTriggers`, `workflowExecutions`, `workflowStepExecutions`; with AI
+`aiTools`, `aiToolExecutions`. `400` on `page < 0` or a `size` out of range.
+
+`POST /connections/{id}/erase` deletes the connection and everything derived from it in every module, in one
+transaction, even while it is used (a plain `DELETE` still answers `409` then): the sync definitions with either side on
+it (with their links, snapshots, cursors, runs and conflicts), the workflows naming it (versions, trigger, runs), the AI
+tools on it and every execution against it, its events, webhook endpoints and credentials. Then the OAuth token is
+revoked (best effort). Audited in Wasichai's `audit_log` (`integration_connection`). `ErasureView`: `{connectionId,
+resource?, recordId?, erased: {table: rows}, revoked?, erasedAt}`.
+
+`POST /connections/{id}/erase-record` `{resource, recordId}` (1–200 and 1–500 characters, else `400`) forgets one
+provider record of the connection: the connection's events keyed by it or whose payload carries the id as a value are
+deleted; in each sync definition on this connection and resource, the links holding it lose their snapshot and
+conflicts, and keep the paired side as `ORPHANED` with this side cleared (a link with only this side is deleted); the
+finished workflow runs and AI tool executions on the connection whose payloads carry the id are deleted (running or
+pending ones stay). `erased` counts rows deleted or changed per table; `revoked` is null. Audited as
+`integration_connection_record` (without the record id). Erase the record at the provider first: a record still there is
+read again by the next sync run.
 
 ### OAuth
 
@@ -239,6 +276,20 @@ permanent error, which would fail again as it is.
 `HealthView`: `{connections: {STATUS: count}, failing: [{id, connectorId, name, status, health, lastValidatedAt?,
 lastError?, rateLimitedUntil?}], jobs: {STATUS: count}}`. `connections` lists every status, zero included; `jobs` only
 the statuses that have jobs. `failing` holds connections that are not `ACTIVE`, or `DEGRADED` or `FAILING`.
+
+## Usage
+
+| Method | Path | Perm | Answer |
+|---|---|---|---|
+| GET | `/usage` | R | `200` array of `UsageView`; `400` |
+
+`GET /usage?from=2026-10-07&to=2026-11-05&metric=provider.calls`: the caller's tenant's daily counters,
+[ADR-0029](../adr/0029-retention-gdpr-usage.md). `from`/`to` are ISO dates (UTC days, inclusive; default the 30 days
+ending today), at most 366 days apart and `from` not after `to` (`400`); `metric` is optional. `UsageView`: `{day,
+metric, count}`, ordered by day then metric; a day with nothing counted has no row. Metrics: `provider.calls` (HTTP
+exchanges with a provider through a connection), `sync.records` (records a sync run created, updated or deleted),
+`workflow.steps` (workflow steps that ran to success or failure), `ai.tool_calls` (AI tool executions that ran).
+Counts reach the table every `wasichai.integrations.usage.flush-interval` (30 s).
 
 ## Synchronization
 

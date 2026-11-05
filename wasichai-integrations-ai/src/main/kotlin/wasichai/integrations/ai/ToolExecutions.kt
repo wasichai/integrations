@@ -27,6 +27,7 @@ import wasichai.integrations.IntegrationsAccess
 import wasichai.integrations.IntegrationsMeters
 import wasichai.integrations.ProviderErrors
 import wasichai.integrations.Transactions
+import wasichai.integrations.UsageMeter
 import wasichai.integrations.WebhookService
 import wasichai.integrations.sdk.ActionExecutor
 import wasichai.integrations.sdk.ConnectorException
@@ -66,7 +67,8 @@ class ToolExecutions(
     private val transactions: Transactions,
     private val meters: IntegrationsMeters,
     private val json: JsonMapper,
-    private val clock: Clock
+    private val clock: Clock,
+    private val usage: UsageMeter? = null
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -264,6 +266,8 @@ class ToolExecutions(
         var output: JsonNode? = null
         var error: String? = null
         var errorKind: String? = null
+        // a call that reached the run: approved or not needing approval, whatever the provider answers
+        usage?.record(execution.organizationId, TOOL_CALLS)
         try {
             output = dispatch(tool, connection, execution.input)
         } catch (e: ConnectorException) {
@@ -445,6 +449,9 @@ class ToolExecutions(
 
     companion object {
         const val AUDIT_OBJECT = "integration_ai_tool_execution"
+
+        // usage metric: tool executions that ran
+        const val TOOL_CALLS = "ai.tool_calls"
         const val MAX_INPUT_BYTES = 64 * 1024
         const val MAX_OUTPUT_BYTES = 16 * 1024
         const val DEFAULT_PAGE = 20

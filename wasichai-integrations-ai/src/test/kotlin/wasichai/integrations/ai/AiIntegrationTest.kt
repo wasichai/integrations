@@ -14,7 +14,9 @@ import java.util.UUID
         "wasichai.integrations.encryption.keys.it1=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
         "wasichai.integrations.encryption.active-key=it1",
         // nothing runs in the background of these tests
-        "wasichai.integrations.jobs.worker-enabled=false"
+        "wasichai.integrations.jobs.worker-enabled=false",
+        // tests call the purge themselves
+        "wasichai.integrations.retention.enabled=false"
     ]
 )
 abstract class AiIntegrationTest : WasichaiIntegrationTest()
