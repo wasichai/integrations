@@ -17,7 +17,7 @@ by `integrations-bom`. The npm packages are released from
 ## Published modules
 
 `integrations-bom`, `integrations-connector-sdk`, `integrations-connector-sdk-test`, `integrations-connector-notion`,
-`integrations-connector-salesforce`, `wasichai-integrations`, `wasichai-integrations-sync`,
+`integrations-connector-salesforce`, `integrations-connector-jira`, `wasichai-integrations`, `wasichai-integrations-sync`,
 `wasichai-spring-boot-starter-integrations`, `wasichai-spring-boot-starter-integrations-sync`. Group `wasichai`.
 `integrations-integration-tests` is never published.
 
@@ -43,6 +43,7 @@ dependencies {
     implementation("wasichai:wasichai-spring-boot-starter-integrations-sync")
     implementation("wasichai:integrations-connector-notion")
     implementation("wasichai:integrations-connector-salesforce")
+    implementation("wasichai:integrations-connector-jira")
 }
 ```
 

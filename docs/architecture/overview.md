@@ -16,6 +16,7 @@ wasichai-core (published by wasichai)
    │
 integrations-connector-notion ─────► integrations-connector-sdk
 integrations-connector-salesforce ─► integrations-connector-sdk
+integrations-connector-jira ───────► integrations-connector-sdk
 integrations-connector-sdk-test ───► integrations-connector-sdk   (test scope only)
 starters/wasichai-spring-boot-starter-integrations(-sync)
 integrations-integration-tests (never published)

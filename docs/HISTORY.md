@@ -2,6 +2,17 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-04 — Jira Cloud connector
+
+`integrations-connector-jira` connects Jira Cloud by OAuth 2.0 (3LO) through `api.atlassian.com`, the site found
+from accessible-resources, or by API token against a configured site
+([#37](https://github.com/wasichai/integrations/issues/37)). Projects are the resources and issue fields, custom ones
+included, the fields; reads use the enhanced JQL search with `nextPageToken`, the change feed polls `updated` a
+minute back in the user's zone (at least once), writes create, edit (read-compare-write against `updated`) and
+delete issues, with rich text as plain-text ADF paragraphs. Transitions and dynamic webhooks are actions; deliveries
+are verified by `X-Hub-Signature` or the OAuth app's HS256 JWT, `WEBHOOKS` stays `IMPLEMENTED` (ADR-0016). REST
+change: none. New tests: `JiraConnectorTest`, `JiraContractTest`, `JiraWebhooksTest`, `JiraValuesTest`.
+
 ## 2026-11-04 — Docs: guides for users, connector authors, sync, deployment and operations
 
 `docs/guides/` adds a user guide, a connector SDK reference, a step-by-step connector guide, a sync guide, a
