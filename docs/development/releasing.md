@@ -19,7 +19,9 @@ by `integrations-bom`. The npm packages are released from
 `integrations-bom`, `integrations-connector-sdk`, `integrations-connector-sdk-test`, `integrations-connector-notion`,
 `integrations-connector-salesforce`, `integrations-connector-jira`, `integrations-connector-github`,
 `integrations-connector-slack`, `integrations-connector-openapi`, `wasichai-integrations`, `wasichai-integrations-sync`,
-`wasichai-spring-boot-starter-integrations`, `wasichai-spring-boot-starter-integrations-sync`. Group `wasichai`.
+`wasichai-integrations-workflows`, `wasichai-spring-boot-starter-integrations`,
+`wasichai-spring-boot-starter-integrations-sync`, `wasichai-spring-boot-starter-integrations-workflows`. Group `wasichai`.
+`integrations-bom` constrains every published module by itself (any project but the BOM and the end-to-end suite).
 `integrations-integration-tests` is never published.
 
 A new module fails the guard (CI job "Publish dry run (Maven)" on every pull request) until it is added to the list in
@@ -42,6 +44,7 @@ dependencies {
     implementation(platform("wasichai:integrations-bom:<version>"))
     implementation("wasichai:wasichai-spring-boot-starter-integrations")
     implementation("wasichai:wasichai-spring-boot-starter-integrations-sync")
+    implementation("wasichai:wasichai-spring-boot-starter-integrations-workflows")
     implementation("wasichai:integrations-connector-notion")
     implementation("wasichai:integrations-connector-salesforce")
     implementation("wasichai:integrations-connector-jira")

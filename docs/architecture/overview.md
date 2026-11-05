@@ -12,7 +12,8 @@ wasichai-core (published by wasichai)
    ▲
    ├── wasichai-integrations ──► integrations-connector-sdk
    │       ▲
-   │       └── wasichai-integrations-sync
+   │       ├── wasichai-integrations-sync
+   │       └── wasichai-integrations-workflows
    │
 integrations-connector-notion ─────► integrations-connector-sdk
 integrations-connector-salesforce ─► integrations-connector-sdk
@@ -21,14 +22,15 @@ integrations-connector-github ─────► integrations-connector-sdk
 integrations-connector-slack ──────► integrations-connector-sdk
 integrations-connector-openapi ────► integrations-connector-sdk
 integrations-connector-sdk-test ───► integrations-connector-sdk   (test scope only)
-starters/wasichai-spring-boot-starter-integrations(-sync)
+starters/wasichai-spring-boot-starter-integrations(-sync, -workflows)
 integrations-integration-tests (never published)
 ```
 
 - The SDK knows no Spring and no Wasichai. Connectors depend only on the SDK; the core modules never depend on a
   connector. Provider names appear only in `integrations-connector-*`.
 - Each Spring module ships its auto-configuration, `wasichai.<module>.enabled` switch, properties and Flyway history
-  (`db/wasichai/integrations`, order 200; `db/wasichai/integrations-sync`, order 210).
+  (`db/wasichai/integrations`, order 200; `db/wasichai/integrations-sync`, order 210;
+  `db/wasichai/integrations-workflows`, order 220).
 
 ## Control plane and data plane
 
@@ -42,6 +44,7 @@ Logical boundaries inside the same deployable:
 | Schema discovery | Connector runtime (`ProviderHttp`, rate limits, retries) |
 | Sync definitions and mappings | Sync engine (diff, ownership, conflicts, writes) |
 | Conflict resolution, health API | Reconciliation, retry and recovery |
+| Workflow definitions, versions, validation | Workflow runs on the job queue (not yet: #42) |
 
 The control plane is request/response under a user's JWT. The data plane runs as the platform per tenant
 (`RecordService.asPlatform` semantics,
@@ -55,6 +58,9 @@ driven by jobs claimed with `FOR UPDATE SKIP LOCKED` ([ADR-0008](../adr/0008-dur
   incremental read → sync engine.
 - **Polling:** schedule (cluster-locked) → job → `ResourceReader.read(since = cursor)` → sync engine → cursor saved.
 - **Write:** sync engine → connector `ResourceWriter` through `ProviderHttp` → link and snapshot persisted.
+- **Workflow:** editor → draft graph → `validate` → `publish` → immutable version and its trigger row. Published
+  workflows do not run yet: execution on the job queue is [#42](https://github.com/wasichai/integrations/issues/42)
+  ([ADR-0022](../adr/0022-integration-workflows.md)).
 
 ## Where to read next
 

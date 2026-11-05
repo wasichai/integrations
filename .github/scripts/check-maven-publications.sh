@@ -18,8 +18,10 @@ integrations-connector-sdk-test
 integrations-connector-slack
 wasichai-integrations
 wasichai-integrations-sync
+wasichai-integrations-workflows
 wasichai-spring-boot-starter-integrations
-wasichai-spring-boot-starter-integrations-sync"
+wasichai-spring-boot-starter-integrations-sync
+wasichai-spring-boot-starter-integrations-workflows"
 
 if [ ! -d "$repo/wasichai" ]; then
   echo "maven publications: nothing under $repo/wasichai" >&2

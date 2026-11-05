@@ -30,5 +30,15 @@ class AppBootsTest : WasichaiIntegrationTest() {
             .exchange()
             .expectStatus()
             .isOk
+        // every integrations module answers next to the others (workflows migrate after sync)
+        listOf("/api/integrations/connectors", "/api/integrations/sync-definitions", "/api/integrations/workflows").forEach {
+            client
+                .get()
+                .uri(it)
+                .header("Authorization", bearer())
+                .exchange()
+                .expectStatus()
+                .isOk
+        }
     }
 }
