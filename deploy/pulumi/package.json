@@ -1,0 +1,22 @@
+{
+    "name": "wasichai-integrations-deploy",
+    "private": true,
+    "description": "Pulumi program: the Wasichai Integrations example image on Kubernetes or k3s (ADR-0030)",
+    "main": "index.ts",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "node --import tsx --test test/*.test.ts"
+    },
+    "dependencies": {
+        "@pulumi/kubernetes": "4.34.3",
+        "@pulumi/pulumi": "3.274.1"
+    },
+    "devDependencies": {
+        "@types/node": "22.20.5",
+        "tsx": "4.23.15",
+        "typescript": "5.9.3"
+    }
+}

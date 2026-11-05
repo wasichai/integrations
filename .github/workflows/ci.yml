@@ -104,6 +104,29 @@ jobs:
       - name: Smoke test (compose up, health, sign-in, catalog, compose down)
         run: .github/scripts/smoke.sh wasichai-integrations-app:ci
 
+  # the Kubernetes program (ADR-0030): typechecked, and run against pulumi's mocks, so no cluster and no credentials.
+  # a real `pulumi preview` needs a cluster to ask; deploy/pulumi/README.md shows it against k3s or kind
+  pulumi:
+    name: Pulumi program (typecheck + mocked preview tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: deploy/pulumi
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: deploy/pulumi/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Program tests (pulumi mocks)
+        run: npm test
+
   commits:
     name: Conventional commits
     if: github.event_name == 'pull_request'

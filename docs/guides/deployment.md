@@ -121,6 +121,7 @@ the Wasichai metadata schema. Nothing has to be run by hand.
 | `http.allow-private-addresses` | `false` | allow provider calls to private, loopback or link-local addresses (tests, labs only) |
 | `http.timeout` | `30s` | per provider call; a timeout is a transient failure |
 | `http.max-response-bytes` | `16777216` (16 MiB) | the largest provider response read |
+| `http.rate-limit.shared` | `true` | one token bucket per connection and per AI tool in PostgreSQL for every replica, and provider pauses (`Retry-After`) they all honour ([ADR-0030](../adr/0030-shared-rate-limits-and-kubernetes.md)); `false`: each replica limits on its own |
 | `jobs.worker-enabled` | `true` | whether this replica runs jobs |
 | `jobs.poll-interval` | `1s` | how often the worker claims due jobs |
 | `jobs.batch` | `20` | jobs claimed per poll, run concurrently |
@@ -176,8 +177,8 @@ Retention ages take Spring durations (`30d`, `12h`). The task names hold dots: i
 An origin in `mcp.allowed-origins` (`https://agent.example.com`) must pass `wasichai.web.cors-allowed-origin-patterns`
 too; MCP clients outside a browser send no `Origin`.
 
-AI tool rate limits are per replica (a token bucket per tool in each instance): n replicas admit up to n times a tool's
-`rateLimitPerMinute` until a cluster-wide budget lands ([#47](https://github.com/wasichai/integrations/issues/47)).
+AI tool rate limits are one budget per tool across the cluster while `wasichai.integrations.http.rate-limit.shared` is
+on (the default): n replicas together admit a tool's `rateLimitPerMinute` ([ADR-0030](../adr/0030-shared-rate-limits-and-kubernetes.md)).
 
 A minimal `application.yml`:
 
@@ -287,8 +288,13 @@ All replicas share the PostgreSQL job queue (`integration_jobs`):
 - The retention purge may run on every replica too: one replica purges per tick (cluster lock
   `integrations.retention`). Each replica buffers its usage counts in memory and adds them to the table every
   `usage.flush-interval` and on a graceful shutdown; a killed replica loses what it had not written yet.
-- Rate limits are kept in memory per replica: n replicas may together reach n times a connector's declared rate. A
-  provider's `429` still slows every replica through retries.
+- Rate limits are shared (`http.rate-limit.shared`, default `true`): each connection has one token bucket in
+  PostgreSQL (`integration_rate_buckets`) that every replica draws on with one atomic upsert per provider call, so n
+  replicas together keep to the connector's declared rate, and a provider's `Retry-After` pauses the connection for
+  all of them. If the database does not answer within 1 s, a replica falls back to its own in-memory bucket for that
+  call (counted and logged, see [operations](operations.md#rate-limits)); it never waits on the database. With the
+  switch off, buckets are per replica: n replicas may reach n times the rate
+  ([ADR-0030](../adr/0030-shared-rate-limits-and-kubernetes.md)).
 - Provider calls are made with the app's own HTTP client; outbound access to the providers' hosts (and DNS) must be
   allowed.
 
@@ -414,6 +420,38 @@ slow one.
   40 s, so give an orchestrator at least that. A job running when its worker stops is claimed again after
   `jobs.lease`; handlers are idempotent.
 
+### Kubernetes and k3s (Pulumi)
+
+[`deploy/pulumi/`](../../deploy/pulumi/) is a Pulumi program (TypeScript, the Kubernetes provider only) that runs the
+image on any cluster from a kubeconfig, k3s, kind and managed clusters alike
+([ADR-0030](../adr/0030-shared-rate-limits-and-kubernetes.md)). It creates a namespace and:
+
+- a `Secret` with `WASICHAI_DB_PASSWORD`, `WASICHAI_JWT_SECRET` and `WASICHAI_INTEGRATIONS_ENCRYPTION_KEYS_<ID>`, from
+  Pulumi config secrets (`dbPassword`, `jwtSecret`, `encryptionKeys`), encrypted in the stack and the state;
+- a `ConfigMap` with the database address, `publicBaseUrl`, the active key id,
+  `WASICHAI_INTEGRATIONS_HTTP_RATELIMIT_SHARED=true`, `SERVER_FORWARDHEADERSSTRATEGY=framework` and any non-secret
+  variable of the table above (`env`);
+- the Deployments `integrations-api` (`SPRING_PROFILES_ACTIVE=api`, `apiReplicas`, default 2) and
+  `integrations-worker` (`worker`, `workerReplicas`, default 1), as uid 10001 with a read-only root filesystem.
+  Probes: startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`. The grace
+  period is 45 s: a 5 s `preStop` pause, the 30 s drain and a margin. The `preStop` sleep needs Kubernetes 1.30+;
+- a Service and an Ingress for the api only, with the host of `publicBaseUrl` and TLS from `tlsSecretName` when set;
+- with `postgresInCluster=true`, a PostgreSQL 18 StatefulSet for trials; otherwise `dbHost` points at your database.
+
+```bash
+cd deploy/pulumi && npm ci
+pulumi stack init prod
+pulumi config set image ghcr.io/acme/wasichai-integrations-app:1.4.0
+pulumi config set publicBaseUrl https://integrations.example.com
+pulumi config set dbHost db.internal.example.com && pulumi config set activeKey k1
+pulumi config set --secret dbPassword ... && pulumi config set --secret jwtSecret ...
+pulumi config set --secret --path 'encryptionKeys.k1' "$(openssl rand -base64 32)"
+pulumi up
+```
+
+Every config key is in [its README](../../deploy/pulumi/README.md). The CI job "Pulumi program (typecheck + mocked
+preview tests)" typechecks the program and runs it against Pulumi's mocks, with no cluster and no credentials.
+
 ### CI smoke test
 
 The CI job "Container image (build + smoke)" builds the image with `PACKAGES_TOKEN` as the BuildKit secret, then
@@ -434,3 +472,4 @@ runs the HTTP checks against an app already running with the seed, e.g. the jar 
 - [ ] With the example image: `WASICHAI_SEED_DEV` off, secrets out of the repository, `api` and `worker` roles set,
       a grace period of at least 40 s.
 - [ ] Retention ages (`retention.max-age.*`) match the data protection policy; the defaults keep events and jobs 30 days.
+- [ ] More than one replica: `http.rate-limit.shared` left on (the default), so providers see one rate per connection.
