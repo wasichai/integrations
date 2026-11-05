@@ -1,0 +1,15 @@
+# placeholders only: the program's tests read these keys, and `pulumi preview --stack ci` works once the three secrets
+# are set (`pulumi config set --secret dbPassword ...`, jwtSecret, `encryptionKeys` with --path). never a real value
+config:
+  wasichai-integrations:image: ghcr.io/example/wasichai-integrations-app:0.0.0-ci
+  wasichai-integrations:namespace: wasichai-integrations-ci
+  wasichai-integrations:publicBaseUrl: https://integrations.ci.example.test
+  wasichai-integrations:ingressClassName: traefik
+  wasichai-integrations:apiReplicas: "2"
+  wasichai-integrations:workerReplicas: "1"
+  wasichai-integrations:postgresInCluster: "true"
+  wasichai-integrations:activeKey: k1
+  wasichai-integrations:env:
+    WASICHAI_INTEGRATIONS_OAUTH_RETURNURL: https://ui.ci.example.test/integrations/connections
+    WASICHAI_WEB_CORSALLOWEDORIGINPATTERNS: https://ui.ci.example.test
+    APP_CONNECTORS_SLACK_ENABLED: "false"

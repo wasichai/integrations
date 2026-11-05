@@ -94,7 +94,14 @@ data class IntegrationsProperties(
         // provider calls to private, loopback or link-local addresses are refused unless this is on (tests, labs)
         val allowPrivateAddresses: Boolean = false,
         val timeout: Duration = Duration.ofSeconds(30),
-        val maxResponseBytes: Int = 16 * 1024 * 1024
+        val maxResponseBytes: Int = 16 * 1024 * 1024,
+        val rateLimit: RateLimit = RateLimit()
+    )
+
+    data class RateLimit(
+        // one bucket per connection (and per ai tool) in postgresql for every replica, and provider pauses they all
+        // honour (ADR-0030). off: each replica limits on its own, n replicas may reach n times the rate
+        val shared: Boolean = true
     )
 
     init {

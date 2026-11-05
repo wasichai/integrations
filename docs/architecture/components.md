@@ -29,6 +29,7 @@ writes round-trip, error responses map to the right `ConnectorError`.
 | `ConnectionService` | lifecycle, test, disconnect, revoke, status and health |
 | `OAuthFlow` | authorization URL, PKCE, state rows, callback, token exchange, refresh |
 | `ProviderHttp` (runtime) | WebClient, SSRF guard, token bucket, `Retry-After`, error mapping, redaction, metrics |
+| `RateLimits` + `RateBuckets` | a connection's token bucket and provider pauses, in PostgreSQL for every replica with a per-replica fallback (ADR-0030) |
 | `JobQueue` + `JobDrain` | durable jobs with dedupe keys, leases, backoff, dead letter |
 | `WebhookIngress` | public endpoint, verification, Event Envelope store, dedupe, job enqueue |
 | REST controllers | catalog, provider configs, connections, discovery, events, jobs, health |
@@ -74,7 +75,7 @@ one execution path the REST API and the MCP endpoint ([#44](https://github.com/w
 | `ToolSchema` | the JSON Schema subset: checks a schema when exposed, validates an input, derives a record tool's schema |
 | `ToolCatalog` | exposures with optimistic locking: connection, connector capabilities, resource, roles, name; per-caller visibility |
 | `ToolExecutions` | the policy (tenant, roles, enabled, rate limit, input), the run through the SDK, approvals, executions and audit |
-| `ToolRateLimits` | calls per minute per tool, per replica, refusing with a wait |
+| `ToolRateLimits` | calls per minute per tool, in the shared buckets (`RateBuckets`) or per replica, refusing with a wait |
 | `ToolRepository` | tools, executions; `ConnectionUsage` for connections a tool uses |
 
 ## Connectors

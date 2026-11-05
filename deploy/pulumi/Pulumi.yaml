@@ -1,0 +1,8 @@
+# the example image (ADR-0028) on Kubernetes or k3s: api + worker, ConfigMap, Secret, Service, Ingress (ADR-0030).
+# config keys and how to run it: README.md
+name: wasichai-integrations
+description: Wasichai Integrations example app on Kubernetes (api and worker roles)
+runtime:
+  name: nodejs
+  options:
+    packagemanager: npm

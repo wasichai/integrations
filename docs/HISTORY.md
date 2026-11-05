@@ -2,6 +2,39 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Shared rate limits and Kubernetes deployment
+
+Rate limits are shared across replicas ([#47](https://github.com/wasichai/integrations/issues/47), ADR-0030). A new
+core migration `V5` adds `integration_rate_buckets` (bucket key, tokens, `updated_at`, `paused_until`). `RateBuckets`
+takes or reserves a token with one atomic upsert per provider call. The upsert refills from `clock_timestamp()`, and
+tokens may go below zero as a reservation the caller waits out with a coroutine delay. A provider's `Retry-After` is
+stored in `paused_until`, so every replica honours it and health's `rateLimitedUntil` shows it. `RateLimits` uses the
+shared bucket under `http:<connection id>`, and `ConnectionHttp` is unchanged. AI tool limits (`ToolRateLimits`)
+share the table under `tool:<org>:<tool id>` with a refusing variant that only takes a token that is there; updating
+or deleting a tool resets its row. A database call that fails or takes more than 1 s falls back to the replica's
+in-memory bucket: `integrations.rate_limit.fallbacks{operation,reason}` counts it, with one warning per outage, and a
+call is never held up by it. Waits are timed as `integrations.rate_limit.waits{source}`. The switch is
+`wasichai.integrations.http.rate-limit.shared`, default `true`; `false` keeps the per-replica buckets.
+
+`deploy/pulumi` is a Pulumi program in TypeScript using only the Kubernetes provider, for k3s or any cluster. It
+deploys a namespace, a Secret from Pulumi config secrets (database password, JWT secret, encryption keys) and a
+ConfigMap; both are auto-named, so a change rolls the pods. It also deploys `integrations-api` (profile `api`,
+configurable replicas) with a Service and an Ingress (the host of `publicBaseUrl`, optional TLS secret), and
+`integrations-worker` (profile `worker`, no Service). The pods run with:
+
+- startup, liveness and readiness probes on the actuator health groups;
+- a 45 s grace period: a 5 s `preStop` sleep and the app's 30 s drain;
+- uid 10001, a read-only root filesystem and no capabilities.
+
+The database is external by config, or an optional in-cluster PostgreSQL 18 StatefulSet for trials. The package also
+holds `Pulumi.ci.yaml` (placeholders) and a README. The new CI job "Pulumi program (typecheck + mocked preview tests)"
+runs `tsc --noEmit` and `node --test` against `pulumi.runtime.setMocks`, with no cluster and no credentials. This
+stands in for a real `pulumi preview` (ADR-0030). The deployment guide gains a Kubernetes section and the
+`http.rate-limit.shared` property; operations, data model, API and components are updated. No REST change. New
+tests: `SharedRateLimitsTest` (integration: two replicas share one burst and one rate; a `429` seen by one pauses
+the other; the refusing variant; the fallback), an auto-configuration test of the switch, and the Pulumi program
+tests (12).
+
 ## 2026-11-05 — Retention, GDPR export and erasure, usage metering
 
 Phase 8 operations across every module ([#46](https://github.com/wasichai/integrations/issues/46), ADR-0029). Three core

@@ -36,3 +36,4 @@ supersedes it and says so in its status line.
 - [ADR-0027: The MCP endpoint is a stateless JSON-RPC interface over the tool catalog and its one execution path](0027-mcp-endpoint.md)
 - [ADR-0028: An unpublished example app ships as one image with two roles, configured by the environment only](0028-example-app-and-image.md)
 - [ADR-0029: Retention, GDPR export and erasure, and usage metering are core SPIs each module fills for its own tables](0029-retention-gdpr-usage.md)
+- [ADR-0030: Rate limits are token buckets in PostgreSQL shared by every replica; Kubernetes is a Pulumi program](0030-shared-rate-limits-and-kubernetes.md)
