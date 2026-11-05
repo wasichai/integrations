@@ -282,7 +282,8 @@ class ConnectionService(
                 describe(e),
                 now
             )
-            ConnectionTestView(false, describe(e), e.retryable, asked, view(find(user.organizationId, id)))
+            // a refused or unreadable authorization needs a reconnect, not another try
+            ConnectionTestView(false, describe(e), e.retryable && e !is ConnectorException.AuthExpired, asked, view(find(user.organizationId, id)))
         }
     }
 

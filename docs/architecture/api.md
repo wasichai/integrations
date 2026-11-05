@@ -124,7 +124,8 @@ also `false` when the connector is no longer installed.
 `ConnectionTestView`: `{ok, error?, retryable?, accountChecked, connection}`. `accountChecked` is `true` when the
 provider was asked for the account; `ok: true` with `accountChecked: false` means nothing was checked at the provider.
 The test first opens the stored credentials, for every connector. A failure marks the connection: `AuthExpired` ⇒
-`NEEDS_REAUTH`/`FAILING`, a retryable failure ⇒ `DEGRADED`, any other ⇒ `ERROR`/`FAILING`.
+`NEEDS_REAUTH`/`FAILING`, a retryable failure ⇒ `DEGRADED`, any other ⇒ `ERROR`/`FAILING`. `retryable` is `false` for an expired or
+unreadable authorization: only a reconnect helps.
 
 Credentials that no configured key opens (sealed with a key removed since, or a damaged row) are an `AuthExpired` with
 the message `credentials cannot be decrypted with the configured keys; reconnect`, wherever they are needed: the
