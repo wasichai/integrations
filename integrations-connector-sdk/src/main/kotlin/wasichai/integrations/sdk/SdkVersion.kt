@@ -17,7 +17,8 @@ data class SdkVersion(
     override fun toString(): String = "$major.$minor"
 
     companion object {
-        val CURRENT = SdkVersion(1, 0)
+        // 1.1: ProviderHttp.credentialHeaders
+        val CURRENT = SdkVersion(1, 1)
 
         private val FORMAT = Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)$""")
 

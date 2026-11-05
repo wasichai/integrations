@@ -39,6 +39,7 @@ The token needs `read:packages`. What each artifact brings:
 | `wasichai-spring-boot-starter-integrations-workflows` | the integrations starter plus `wasichai-integrations-workflows` (definitions, versions, validation; nothing runs yet) |
 | `wasichai-integrations`, `wasichai-integrations-sync`, `wasichai-integrations-workflows` | the modules alone, for an app that assembles Wasichai itself |
 | `integrations-connector-notion`, `-salesforce`, `-jira`, `-github`, `-slack` | the shipped connectors (no Spring) |
+| `integrations-connector-salesforce-pubsub` | the Salesforce connector with Change Data Capture over the Pub/Sub API (brings gRPC, protobuf, Avro) |
 | `integrations-connector-openapi` | a connector for any REST API with an OpenAPI 3 document, configured in code (no Spring) |
 | `integrations-connector-sdk`, `integrations-connector-sdk-test` | for writing and testing connectors |
 
@@ -61,6 +62,39 @@ pins a REST API version (`"66.0"`; by default the instance's newest). `NotionCon
 (`2025-09-03`). `JiraConfig(siteUrl = "https://acme.atlassian.net")` enables API token connections against that site,
 and `cloudId` pins one site when an OAuth grant reaches several ([ADR-0016](../adr/0016-jira-cloud-connector.md)). Each
 connector bean is validated at start-up; an invalid manifest or a duplicate id stops the app.
+
+### Salesforce Change Data Capture
+
+Polling is the default and needs nothing in Salesforce. To read changes of some objects through Change Data Capture
+instead ([ADR-0024](../adr/0024-salesforce-cdc-pub-sub.md)), depend on `integrations-connector-salesforce-pubsub` and
+declare its connector **instead of** `SalesforceConnector` (both have the id `salesforce`, so existing connections keep
+working):
+
+```kotlin
+@Bean
+fun salesforceConnector(): SalesforcePubSubConnector =
+    SalesforcePubSubConnector(
+        SalesforcePubSubConfig(channels = mapOf("Account" to "/data/AccountChangeEvent", "Contact" to "/data/ContactChangeEvent")),
+        SalesforceConfig()
+    )
+```
+
+In each tenant's org:
+
+1. Change Data Capture must be available to the org (Enterprise, Unlimited and Developer editions include it for a
+   limited number of objects; more objects need the add-on license).
+2. In Setup → Integrations → Change Data Capture, select the objects to synchronize. They publish on
+   `/data/<Object>ChangeEvent` (custom objects: `/data/<Object>__ChangeEvent`); a custom channel (`/data/<Name>__chn`)
+   or `/data/ChangeEvents` (all selected objects) works too, and is what `channels` names per object.
+3. The connected user needs `API Enabled` and read access to those objects ("View All" on an object for its change
+   events, as Salesforce documents); the OAuth scope `api` covers the Pub/Sub API.
+
+Objects missing from `channels` keep polling. The connector reaches `api.pubsub.salesforce.com:7443` over TLS (open the
+egress, `SalesforcePubSubConfig.endpoint` changes it). Each sync run opens one short gRPC subscription per CDC object
+and waits up to `drain` (5 s) for events. A replay id Salesforce no longer keeps (72-hour retention), a gap event or a
+changed channel starts that side over with a full read and the reconcile checks (`cursorResets` on the run, the
+`integrations.sync.reconcile{finding=cursor_reset}` counter). A missing entitlement or an unknown channel fails the run
+with `PermissionDenied`.
 
 The modules need what the Wasichai starter provides: PostgreSQL through R2DBC, Wasichai's JWT security and
 `CurrentUser`, `WasichaiSchemas`, and the cluster lock. Each module runs its own Flyway history: `integrations`
@@ -194,7 +228,8 @@ Webhook endpoints need `public-base-url` too. A tenant administrator creates one
 verifies an endpoint by posting a token, which an administrator reads (`GET /webhook-endpoints/{id}/verification-token`)
 and pastes back at Notion; providers that show a signing secret at registration take it in the create body
 (`secret`). Deliveries larger than `webhooks.max-body-bytes` are refused. Salesforce has no webhook support in the
-connector: its changes are polled ([ADR-0014](../adr/0014-salesforce-change-capture.md)). For Slack, create the endpoint
+connector: its changes are polled, or read by Change Data Capture
+([ADR-0024](../adr/0024-salesforce-cdc-pub-sub.md)). For Slack, create the endpoint
 with the app's signing secret first, then paste its `url` as the Events API request url: Slack's `url_verification`
 challenge is answered by the endpoint ([ADR-0020](../adr/0020-slack-connector.md)).
 

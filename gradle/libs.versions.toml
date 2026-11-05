@@ -13,6 +13,12 @@ testcontainers = "2.0.5"
 jackson2 = "2.22.4"
 jackson3 = "3.2.4"
 scram = "3.4"
+# salesforce change data capture (integrations-connector-salesforce-pubsub, ADR-0024). grpc and protobuf
+# runtimes come from the spring boot bom; these pin only the code generators to the same lines
+protobufPlugin = "0.10.0"
+protoc = "4.36.2"
+grpcJava = "1.84.1"
+avro = "1.12.2"
 # ktlint's own classpath brings logback 1.3.15; lifted to the boot line
 logback = "1.5.38"
 
@@ -55,6 +61,16 @@ flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 
 
+# salesforce pub/sub api client (grpc over okhttp, protobuf messages, avro payloads); versions from the spring boot bom
+grpc-okhttp = { module = "io.grpc:grpc-okhttp" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf" }
+grpc-stub = { module = "io.grpc:grpc-stub" }
+grpc-kotlin-stub = { module = "io.grpc:grpc-kotlin-stub" }
+grpc-inprocess = { module = "io.grpc:grpc-inprocess" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java" }
+protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protoc" }
+grpc-protoc-gen-java = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpcJava" }
+avro = { module = "org.apache.avro:avro", version.ref = "avro" }
 
 reactor-netty = { module = "io.projectreactor.netty:reactor-netty-http" }
 reactor-test = { module = "io.projectreactor:reactor-test" }
@@ -69,3 +85,4 @@ ktlint-gradle-plugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", versio
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobufPlugin" }

@@ -20,6 +20,7 @@ supersedes it and says so in its status line.
   (registration superseded by ADR-0017)
 - [ADR-0013: Connector actions become MCP tools later, and only when explicitly exposed](0013-mcp-exposure-later-and-opt-in.md)
 - [ADR-0014: Salesforce changes are polled first; Pub/Sub Change Data Capture comes later](0014-salesforce-change-capture.md)
+  ("later" superseded by ADR-0024)
 - [ADR-0015: The sync engine's implementation refines links, runs, conflicts and reconciliation](0015-sync-implementation-decisions.md)
 - [ADR-0016: Jira finds its site on use, writes rich text as plain paragraphs, and claims webhooks only as implemented](0016-jira-cloud-connector.md)
 - [ADR-0017: Connectors are plain SDK libraries; the app declares their beans](0017-connectors-as-plain-libraries.md)
@@ -29,3 +30,4 @@ supersedes it and says so in its status line.
 - [ADR-0021: The OpenAPI connector maps a document in code, declares only what the mapping provides, and reads YAML](0021-openapi-connector.md)
 - [ADR-0022: Integration workflows are a module of their own: a versioned graph with closed conditions, run on the job queue](0022-integration-workflows.md)
 - [ADR-0023: A token answer without a token that names an error is a refused grant](0023-token-refusals-in-ok-responses.md)
+- [ADR-0024: Salesforce Change Data Capture is a bounded pull over the Pub/Sub API, in its own module](0024-salesforce-cdc-pub-sub.md)

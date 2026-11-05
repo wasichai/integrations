@@ -41,7 +41,8 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 // salesforce through its rest api: describe, soql, sObject crud, external-id upsert and a polling change feed
-// (SystemModstamp + the deleted resource). change data capture over the pub/sub api is not here (issue #14).
+// (SystemModstamp + the deleted resource). change data capture over the pub/sub api lives in
+// integrations-connector-salesforce-pubsub (ADR-0024), which reuses this connector.
 class SalesforceConnector(
     private val config: SalesforceConfig = SalesforceConfig()
 ) : Connector,
@@ -208,6 +209,29 @@ class SalesforceConnector(
                 ChangeCheckpoint(seen ?: state.since, deletedSince, null, null)
             }
         return ChangePage(changes, next.format(), nextUrl != null)
+    }
+
+    // the current state of records a feed only knows by id (change data capture, ADR-0024): one soql query per
+    // chunk, in no particular order. an id missing from the answer is deleted or not visible to this user
+    suspend fun readMany(
+        context: ConnectorContext,
+        resource: String,
+        ids: Collection<String>
+    ): List<ProviderRecord> {
+        if (ids.isEmpty()) return emptyList()
+        val describe = sobject(context, resource)
+        val out = mutableListOf<ProviderRecord>()
+        ids.map(::recordId).distinct().chunked(IDS_PER_QUERY).forEach { chunk ->
+            val where = "Id IN (${chunk.joinToString(", ") { Soql.string(it) }})"
+            var body = query(context, Soql.select(describe.selectable, resource, where), IDS_PER_QUERY)
+            out += records(body, describe)
+            while (true) {
+                val nextUrl = body.path("nextRecordsUrl").asStringOpt().orElse(null) ?: break
+                body = next(context, nextUrl, IDS_PER_QUERY)
+                out += records(body, describe)
+            }
+        }
+        return out
     }
 
     // the deleted resource covers the last 30 days and wants a window of at least a minute
@@ -419,6 +443,8 @@ class SalesforceConnector(
         const val INSTANCE_URL = "instance_url"
         const val API_VERSION = "api_version"
 
+        // 200 quoted 18-character ids keep the query far below soql's length limit
+        private const val IDS_PER_QUERY = 200
         private val RECORD_ID = Regex("""^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$""")
         private val NEXT_URL = Regex("""^/services/data/v\d{2,3}\.\d/query/[A-Za-z0-9-]+$""")
     }

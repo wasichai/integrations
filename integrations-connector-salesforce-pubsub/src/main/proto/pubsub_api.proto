@@ -1,0 +1,69 @@
+// The part of Salesforce's Pub/Sub API this connector uses, reproduced from pubsub_api.proto as Salesforce
+// publishes it (https://github.com/forcedotcom/pub-sub-api/blob/main/pubsub_api.proto): the Subscribe and GetSchema
+// rpcs and the messages they carry. Field numbers and names follow the published file; Publish, GetTopic and
+// ManagedSubscribe are left out. Package and service names are the wire names (eventbus.v1.PubSub); the java
+// package is ours so the generated classes cannot clash with Salesforce's own jar. See ADR-0024.
+syntax = "proto3";
+
+package eventbus.v1;
+
+option java_multiple_files = true;
+option java_package = "wasichai.integrations.connector.salesforce.pubsub.proto";
+option java_outer_classname = "PubSubProto";
+
+// Where a subscription starts: the tip of the stream, the oldest retained event, or after a stored replay id.
+enum ReplayPreset {
+  LATEST = 0;
+  EARLIEST = 1;
+  CUSTOM = 2;
+}
+
+message EventHeader {
+  string key = 1;
+  bytes value = 2;
+}
+
+// An event as published: its payload is Avro binary written with the schema named by schema_id.
+message ProducerEvent {
+  string id = 1;
+  string schema_id = 2;
+  bytes payload = 3;
+  repeated EventHeader headers = 4;
+}
+
+// An event as delivered, with the opaque replay id to resume after it.
+message ConsumerEvent {
+  ProducerEvent event = 1;
+  bytes replay_id = 2;
+}
+
+message SchemaRequest {
+  string schema_id = 1;
+}
+
+message SchemaInfo {
+  string schema_json = 1;
+  string schema_id = 2;
+  string rpc_id = 3;
+}
+
+// Sent first to start a subscription and later to ask for more events (flow control).
+message FetchRequest {
+  string topic_name = 1;
+  ReplayPreset replay_preset = 2;
+  bytes replay_id = 3;
+  int32 num_requested = 4;
+  string auth_refresh = 5;
+}
+
+message FetchResponse {
+  repeated ConsumerEvent events = 1;
+  bytes latest_replay_id = 2;
+  string rpc_id = 3;
+  int32 pending_num_requested = 4;
+}
+
+service PubSub {
+  rpc Subscribe (stream FetchRequest) returns (stream FetchResponse);
+  rpc GetSchema (SchemaRequest) returns (SchemaInfo);
+}

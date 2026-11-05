@@ -170,13 +170,15 @@ Shipped connectors today:
 |---|---|---|
 | `notion` (`integrations-connector-notion`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth code without PKCE, API key |
 | `salesforce` (`integrations-connector-salesforce`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `UPSERT` | OAuth code with PKCE |
+| `salesforce` (`integrations-connector-salesforce-pubsub`)³ | the same, `CHANGE_FEED` by Change Data Capture for configured objects | OAuth code with PKCE |
 | `jira` (`integrations-connector-jira`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `ACTIONS`, `WEBHOOKS`¹ | OAuth 3LO, API token |
 | `github` (`integrations-connector-github`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth code with PKCE, PAT |
 | `slack` (`integrations-connector-slack`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth v2 without PKCE, bot token |
 | configured id (`integrations-connector-openapi`) | `DISCOVERY`, `READ`; `CHANGE_FEED`, `WRITE` per mapping² | API key header, bearer, OAuth code |
 
-Salesforce's change feed polls `SystemModstamp` and the deleted records; Change Data Capture is planned
-([#14](https://github.com/wasichai/integrations/issues/14), [ADR-0014](../adr/0014-salesforce-change-capture.md)). Jira's
+Salesforce's change feed polls `SystemModstamp` and the deleted records; with `integrations-connector-salesforce-pubsub`
+the objects given a channel read Change Data Capture events over the Pub/Sub API instead
+([#14](https://github.com/wasichai/integrations/issues/14), [ADR-0024](../adr/0024-salesforce-cdc-pub-sub.md)). Jira's
 choices (site lookup, webhook verification, rich text as plain text) are in
 [ADR-0016](../adr/0016-jira-cloud-connector.md). GitHub's (user tokens only, a fresh-query change feed, deletes refused)
 are in [ADR-0019](../adr/0019-github-connector.md). Slack's (the workspace as the account, a feed of new messages only,
@@ -189,6 +191,9 @@ connector turns an OpenAPI 3 document plus a mapping written in code into a conn
 
 ² The OpenAPI connector's capabilities are `IMPLEMENTED` by default: its code is tested against a petstore stub, a
 given mapping is not. An app raises them to `TESTED` (`OpenApiConfig.maturity`) once its own tests cover its mapping.
+
+³ Same id as the polling connector: an app registers one of the two. Its CDC path is tested against an in-process
+Pub/Sub stub built from the documented protocol, not a real org; ADR-0024 lists the points to verify.
 
 ## ManifestValidator
 
@@ -205,7 +210,7 @@ and fails the application on a problem or on two connectors with the same id. It
 
 ## SdkVersion
 
-`SdkVersion(major, minor)`, `SdkVersion.CURRENT` is `1.0`. A connector built for `1.2` runs on a `1.5` runtime, never on
+`SdkVersion(major, minor)`, `SdkVersion.CURRENT` is `1.1` (`1.1` added `ProviderHttp.credentialHeaders`). A connector built for `1.2` runs on a `1.5` runtime, never on
 `2.x` nor on `1.1` (`isSupportedBy`). `SdkVersion.parse("1.0")` reads the `<major>.<minor>` form. Within a major the SDK
 only adds (new optional interfaces, new optional manifest fields).
 
@@ -241,6 +246,9 @@ job and run errors.
 ```kotlin
 interface ProviderHttp {
     suspend fun exchange(request: ProviderRequest): ProviderResponse
+
+    // sdk 1.1, for a transport ProviderHttp cannot carry
+    suspend fun credentialHeaders(refresh: Boolean = false): Map<String, String>
 }
 ```
 
@@ -261,6 +269,13 @@ In the running platform the `ProviderHttp` of a connection:
 
 It does not throw on an unsuccessful status: the connector reads `status` and decides (`null` for a `404` on `read`,
 `HttpErrors.classify` otherwise).
+
+`credentialHeaders(refresh)` lends the connection's credential headers to a transport the connector runs itself (the
+Salesforce Pub/Sub API is gRPC and wants the token in its own call headers); `refresh = true` renews an OAuth token once
+after the provider refused it. Use it only when `exchange` cannot reach the provider: hand the values straight to that
+transport, never keep, log or return them. Rate limits, host checks and metrics of `exchange` do not apply to such a
+transport. The default implementation throws `UnsupportedOperationException`
+([ADR-0024](../adr/0024-salesforce-cdc-pub-sub.md)).
 
 ## ConnectorContext
 

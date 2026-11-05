@@ -2,6 +2,24 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Salesforce Change Data Capture via Pub/Sub
+
+New module `integrations-connector-salesforce-pubsub` ([#14](https://github.com/wasichai/integrations/issues/14)):
+`SalesforcePubSubConnector` is the Salesforce connector (same id, everything delegated to `SalesforceConnector`) whose
+change feed reads Change Data Capture events over the Pub/Sub API for the objects given a channel in
+`SalesforcePubSubConfig`; other objects keep polling, and polling stays the default. Each `changes()` call is a bounded
+pull: one gRPC `Subscribe` from the stored replay id (kept as received, base64), up to 100 events within a short drain,
+schemas by `GetSchema`, Avro decoded; only the `ChangeEventHeader` is trusted, records are fetched by id with one SOQL
+query (`SalesforceConnector.readMany`, new). A feed starts with a full read, then subscribes from `EARLIEST` skipping
+what that read covered. An expired replay id, a `GAP_*` event or a changed channel is a `Permanent` with a `reason`,
+which the sync engine already turns into a cursor reset, a full read and the reconcile checks. SDK 1.1 adds
+`ProviderHttp.credentialHeaders(refresh)` so a connector can authenticate a transport the platform cannot carry;
+`ConnectionHttp` implements it with the same refresh-once rule (ADR-0024, superseding ADR-0014's "later"). New
+dependencies, this module only: gRPC (okhttp transport), grpc-kotlin, protobuf at the Spring Boot BOM's versions, Avro
+1.12.2, the protobuf Gradle plugin 0.10.0. REST change: none. New tests: `SalesforcePubSubConnectorTest` (in-process
+gRPC stub), `SalesforcePubSubConfigTest`, `SalesforcePubSubContractTest`, `readMany` in `SalesforceConnectorTest`,
+credential lending in `ConnectionApiTest`.
+
 ## 2026-11-05 — Workflow definitions and versions
 
 New module `wasichai-integrations-workflows` and starter `wasichai-spring-boot-starter-integrations-workflows`

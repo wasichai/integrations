@@ -10,6 +10,9 @@ The two shipped connectors are the real references:
   on `last_edited_time`, writes, signed webhooks with a verification handshake.
 - `integrations-connector-salesforce` (`SalesforceConnector`): OAuth with PKCE, sObject describe, SOQL reads, CRUD,
   upsert by external id, a change feed polling `SystemModstamp` and deleted records.
+  `integrations-connector-salesforce-pubsub` (`SalesforcePubSubConnector`) shows a connector that reuses another by
+  delegation and runs its own transport (gRPC) with `ProviderHttp.credentialHeaders`
+  ([ADR-0024](../adr/0024-salesforce-cdc-pub-sub.md)).
 
 The example below is a small made-up provider, "Tasks", that implements `Connector`, `ResourceReader` and
 `ResourceWriter`. Every snippet is an excerpt of
