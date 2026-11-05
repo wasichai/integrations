@@ -226,7 +226,9 @@ trying later may help.
 
 `AuthExpired` is retryable inside one call: on a `401` the platform refreshes an OAuth token once and repeats the
 request ([ProviderHttp](#providerhttp)). When the refresh is refused, the connection becomes `NEEDS_REAUTH` and a person
-must reconnect.
+must reconnect. The platform reads the refusal itself, with no connector code: a `400`/`401` with an RFC 6749 `error`,
+or a `2xx` without `access_token` that carries an `error`, as Slack's `ok:false` answers do
+([ADR-0023](../adr/0023-token-refusals-in-ok-responses.md)).
 
 `HttpErrors.classify(response)` is the default mapping of an unsuccessful response: `401` → `AuthExpired`, `403` →
 `PermissionDenied`, `404`/`410` → `NotFound`, `409`/`412` → `Conflict`, `429` → `RateLimited` (with `Retry-After` in

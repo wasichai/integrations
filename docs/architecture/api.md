@@ -135,7 +135,10 @@ sync run fails as `permanent` and its job is not retried. Connecting the same ac
 connection with `accountChecked: false` has to be deleted and connected anew.
 
 A connection's status and health change only through a test, a token refresh (refused ⇒ `NEEDS_REAUTH`/`FAILING`),
-unreadable credentials and connecting the account again. A failed sync run or job does not change them: its error is
+unreadable credentials and connecting the account again. A refresh is refused when the token endpoint answers
+`400`/`401` with an RFC 6749 `error`, or a `2xx` without `access_token` that carries an `error` (some providers refuse
+inside a `200`); a `2xx` with neither is a malformed answer, a permanent failure that leaves the status alone
+([ADR-0023](../adr/0023-token-refusals-in-ok-responses.md)). A failed sync run or job does not change them: its error is
 on the run and the definition's status.
 
 `DELETE` answers `409` naming what still uses the connection (each sync definition, in any status, with a side on
@@ -164,7 +167,7 @@ a PKCE S256 challenge when the connector uses PKCE; the UI sends the browser the
 | `missing_code` | no `code` |
 | `unknown_connector` | the connector is no longer installed |
 | `provider_not_configured` | the provider config was deleted meanwhile |
-| `token_refused` | the token endpoint refused the code |
+| `token_refused` | the token endpoint refused the code: a `400`/`401` with an `error`, or a `2xx` without `access_token` that carries an `error` |
 | `provider_unavailable` | the provider failed while exchanging or reading the account |
 
 ### Discovery

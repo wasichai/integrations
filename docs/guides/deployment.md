@@ -175,7 +175,9 @@ Connector specifics:
   `offline_access` for a refresh token. The site is found from the grant's accessible resources on use.
 - Slack: OAuth v2 with the app's client secret (no PKCE, no revocation); default bot scopes `channels:read`,
   `groups:read`, `channels:history`, `groups:history`, `chat:write`. With token rotation on, the refresh token is used
-  like any other; a bot token (`xoxb-`) can be used instead of OAuth (`authType: API_KEY`), for a single workspace.
+  like any other, and a refused one (`ok:false`, `invalid_refresh_token`) turns the connection `NEEDS_REAUTH`
+  ([ADR-0023](../adr/0023-token-refusals-in-ok-responses.md)); a bot token (`xoxb-`) can be used instead of OAuth
+  (`authType: API_KEY`), for a single workspace.
 
 ## Webhooks
 

@@ -224,6 +224,30 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
     }
 
     @Test
+    fun `a refresh refused inside a 200 answer puts the connection in NEEDS_REAUTH`() {
+        val (id, _) = connect()
+        stub.on(StubMethod.POST, "/token") { _, _ -> StubResponse.json("""{"ok":false,"error":"invalid_refresh_token"}""") }
+        stub.on(StubMethod.GET, "/me") { _, _ -> StubResponse.json("""{"error":"unauthorized"}""", 401) }
+        val tested = call(client, HttpMethod.POST, "/api/integrations/connections/$id/test", tenant.admin, null, 200)
+        assertFalse(tested.get("ok").asBoolean())
+        assertFalse(tested.get("retryable").asBoolean())
+        assertEquals("NEEDS_REAUTH", tested.get("connection").get("status").asString())
+        assertEquals("FAILING", tested.get("connection").get("health").asString())
+        assertTrue(tested.get("error").asString().startsWith("AuthExpired"), tested.toString())
+    }
+
+    @Test
+    fun `a code refused inside a 200 answer comes back as token_refused, and no connection is made`() {
+        stub.on(StubMethod.POST, "/token") { _, _ -> StubResponse.json("""{"ok":false,"error":"invalid_code"}""") }
+        val start = call(client, HttpMethod.POST, "/api/integrations/connections/oauth/start", tenant.admin, mapOf("connectorId" to "stub-oauth"), 200)
+        val state = query(URI.create(start.get("authorizationUrl").asString())).getValue("state")
+        val back = query(callback("code=c&state=$state"))
+        assertEquals("error", back["status"])
+        assertEquals("token_refused", back["error"])
+        assertTrue(stub.requests.none { it.path == "/me" })
+    }
+
+    @Test
     fun `credentials no configured key opens put the connection in NEEDS_REAUTH instead of failing`() {
         val (id, _) = connect()
         // as if sealed with a key that was removed since: the format is intact, the key is not configured

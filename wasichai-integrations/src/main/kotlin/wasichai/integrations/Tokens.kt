@@ -78,12 +78,19 @@ class TokenClient(
     ): TokenGrant {
         val response = http.send(formRequest(tokenUrl, client, params))
         val body = runCatching { json.readTree(response.body) }.getOrNull()
+        val error =
+            body
+                ?.path("error")
+                ?.takeIf { it.isString }
+                ?.asString()
+                ?.takeIf { it.isNotBlank() }
         if (!response.successful) {
-            val error = body?.path("error")?.let { if (it.isMissingNode || it.isNull) null else it.asString() }
             if (response.status in 400..401 && error != null) throw TokenRefusedException(error)
             throw HttpErrors.classify(response)
         }
         val access = body?.path("access_token")?.takeUnless { it.isMissingNode || it.isNull }?.asString()
+        // some providers refuse inside a 200: an rfc 6749 error name without a token is a refusal too (ADR-0023)
+        if (access.isNullOrBlank() && error != null) throw TokenRefusedException(error)
         if (body == null || access.isNullOrBlank()) throw ConnectorException.Permanent("token response without access_token")
         return TokenGrant(
             accessToken = access,
