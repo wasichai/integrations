@@ -2,6 +2,16 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Token refusals inside a 200 answer
+
+The token client now reads a `2xx` token answer without `access_token` that carries an RFC 6749 `error` as a refused
+grant, exactly like a `400 invalid_grant` ([#66](https://github.com/wasichai/integrations/issues/66)). A refused refresh
+of a provider that refuses inside a `200` (Slack's `{"ok":false,"error":"invalid_refresh_token"}`) now marks the
+connection `NEEDS_REAUTH`/`FAILING` instead of failing every call as `Permanent`, and a refused code exchange sends the
+browser back with `error=token_refused`. A `2xx` with neither a token nor an `error` stays a malformed answer
+(`Permanent`); only a non-blank string `error` counts. No manifest hint (ADR-0023). REST change: none (outcomes
+documented in `api.md`). New tests: `TokenClientTest`; `ConnectionApiTest` covers both paths against the stub provider.
+
 ## 2026-11-05 — OpenAPI connector
 
 `integrations-connector-openapi` turns an OpenAPI 3.x document (JSON or YAML) plus an explicit mapping written in code

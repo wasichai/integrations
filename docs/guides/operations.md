@@ -31,7 +31,7 @@ A connection's status and health change in two places:
 | the test fails with `AuthExpired` | `NEEDS_REAUTH` | `FAILING` |
 | the test fails with another retryable error | unchanged | `DEGRADED` |
 | the test fails with a non-retryable error | `ERROR` | `FAILING` |
-| the provider refuses to refresh an OAuth token (any call) | `NEEDS_REAUTH` | `FAILING` |
+| the provider refuses to refresh an OAuth token (any call; a `400`/`401` or a `2xx` naming an `error`) | `NEEDS_REAUTH` | `FAILING` |
 | no configured key opens the stored credentials (any call, or the test) | `NEEDS_REAUTH` | `FAILING` |
 | the account is connected again | `ACTIVE` | `HEALTHY` |
 
@@ -126,7 +126,8 @@ Useful alerts: `integrations.jobs{outcome="dead"}` increasing; `integrations.syn
 
 ## Diagnosing failures
 
-- **Connection `NEEDS_REAUTH`** (health `failing`, `lastError`): the refresh was refused or the token revoked. Connect
+- **Connection `NEEDS_REAUTH`** (health `failing`, `lastError`): the refresh was refused or the token revoked;
+  `lastError` "authorization expired: <code>" names the provider's refusal (`invalid_grant`, `invalid_refresh_token`…). Connect
   the same account again (it updates in place), then retry the dead jobs.
 - **`lastError` "credentials cannot be decrypted with the configured keys; reconnect"** (log `credentials of
   connection ... cannot be opened`): the key they were sealed with was removed, or the row was damaged. Put the key
