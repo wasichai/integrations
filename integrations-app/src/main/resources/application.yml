@@ -1,0 +1,35 @@
+# the example app's defaults. every value here, and every other property, is set from the environment by spring's
+# relaxed binding (WASICHAI_INTEGRATIONS_PUBLICBASEURL, APP_CONNECTORS_JIRA_SITEURL...): ADR-0028.
+# no secret has a default: the jwt secret and the encryption keys come from the environment or the app does not start.
+spring:
+  application:
+    name: wasichai-integrations
+  main:
+    banner-mode: off
+  lifecycle:
+    # in-flight requests get this long after SIGTERM; keep it below the orchestrator's grace period
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      # /actuator/health/liveness and /readiness for orchestrators that probe them
+      probes:
+        enabled: true
+
+wasichai:
+  security:
+    # sign-in attempt limits and token revocation, as wasichai recommends before production
+    login:
+      enabled: true
+    jwt:
+      revocation: true

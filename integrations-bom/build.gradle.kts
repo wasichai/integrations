@@ -9,9 +9,9 @@ javaPlatform {
     allowDependencies()
 }
 
-// never published as a constraint: the bom itself and the end-to-end suite.
+// never published as a constraint: the bom itself, the end-to-end suite and the example app (ADR-0028).
 // rule this filter assumes: every other integrations project applies wasichai.publishing
-val unpublished = setOf("integrations-bom", "integrations-integration-tests")
+val unpublished = setOf("integrations-bom", "integrations-integration-tests", "integrations-app")
 
 dependencies {
     // the wasichai line these modules are built against

@@ -26,6 +26,7 @@ integrations-connector-openapi ────► integrations-connector-sdk
 integrations-connector-sdk-test ───► integrations-connector-sdk   (test scope only)
 starters/wasichai-spring-boot-starter-integrations(-sync, -workflows, -ai)
 integrations-integration-tests (never published)
+integrations-app ─► the starters + every shipped connector but openapi   (example app and image, never published)
 ```
 
 - The SDK knows no Spring and no Wasichai. Connectors depend only on the SDK; the core modules never depend on a

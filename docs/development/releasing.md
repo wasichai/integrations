@@ -22,8 +22,9 @@ by `integrations-bom`. The npm packages are released from
 `wasichai-integrations-sync`, `wasichai-integrations-workflows`, `wasichai-integrations-ai`,
 `wasichai-spring-boot-starter-integrations`, `wasichai-spring-boot-starter-integrations-sync`,
 `wasichai-spring-boot-starter-integrations-workflows`, `wasichai-spring-boot-starter-integrations-ai`. Group `wasichai`.
-`integrations-bom` constrains every published module by itself (any project but the BOM and the end-to-end suite).
-`integrations-integration-tests` is never published.
+`integrations-bom` constrains every published module by itself (any project but the BOM, the end-to-end suite and the
+example app). `integrations-integration-tests` and `integrations-app` are never published; the app ships as a
+container image built from its Dockerfile ([ADR-0028](../adr/0028-example-app-and-image.md)), not as a Maven artifact.
 
 A new module fails the guard (CI job "Publish dry run (Maven)" on every pull request) until it is added to the list in
 `.github/scripts/check-maven-publications.sh` on purpose.
@@ -32,7 +33,7 @@ A new module fails the guard (CI job "Publish dry run (Maven)" on every pull req
 
 | Secret | Needed for |
 |---|---|
-| `PACKAGES_TOKEN` (organization) | reading the `wasichai-*` packages in CI and in `publish.yml` |
+| `PACKAGES_TOKEN` (organization) | reading the `wasichai-*` packages in CI (the image build too, as a BuildKit secret) and in `publish.yml` |
 | `RELEASE_PLEASE_TOKEN` | a release that triggers `publish.yml` (a release made with `GITHUB_TOKEN` triggers no workflow) |
 
 Publishing itself uses the workflow's `GITHUB_TOKEN` (`packages: write`). After the first publish, give the apps

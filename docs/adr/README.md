@@ -34,3 +34,4 @@ supersedes it and says so in its status line.
 - [ADR-0025: Workflow runs are rows, steps are jobs, joins count arrivals under the run's lock](0025-workflow-execution.md)
 - [ADR-0026: AI tools are explicitly exposed, sensitive by default, and run through one audited execution path](0026-ai-tools.md)
 - [ADR-0027: The MCP endpoint is a stateless JSON-RPC interface over the tool catalog and its one execution path](0027-mcp-endpoint.md)
+- [ADR-0028: An unpublished example app ships as one image with two roles, configured by the environment only](0028-example-app-and-image.md)

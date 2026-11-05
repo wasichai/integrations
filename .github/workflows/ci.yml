@@ -84,6 +84,26 @@ jobs:
       - name: Release guard (Maven)
         run: .github/scripts/check-maven-publications.sh "$RUNNER_TEMP/m2"
 
+  # the example app's image (ADR-0028): built as an operator would, then run as api + worker under compose
+  image:
+    name: Container image (build + smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # the read:packages token reaches gradle inside the build as a BuildKit secret, never a build arg or a layer
+      - name: Build the image
+        env:
+          DOCKER_BUILDKIT: '1'
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+        run: >-
+          docker build --secret id=packages_token,env=PACKAGES_TOKEN
+          -f integrations-app/Dockerfile -t wasichai-integrations-app:ci .
+      - name: Pull database image
+        run: docker pull -q postgres:18
+      - name: Smoke test (compose up, health, sign-in, catalog, compose down)
+        run: .github/scripts/smoke.sh wasichai-integrations-app:ci
+
   commits:
     name: Conventional commits
     if: github.event_name == 'pull_request'

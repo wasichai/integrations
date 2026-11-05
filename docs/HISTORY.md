@@ -2,6 +2,24 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Example application, container image and Compose
+
+New Gradle project `integrations-app` ([#45](https://github.com/wasichai/integrations/issues/45), ADR-0028), never
+published (left out of `integrations-bom`; the release guard fails if it appears): a runnable Spring Boot app of the
+Wasichai starter, the integrations, sync, workflows and AI starters, actuator health and the Notion, Salesforce,
+Jira, GitHub and Slack connectors. Each connector bean is switched by `app.connectors.<id>.enabled` (default on) and
+configured by `app.connectors.*` (Salesforce login url, API version and CDC channels, which select the Pub/Sub
+connector; Jira site and cloud id; GitHub host); OpenAPI is left out (its mapping is code). Configured by environment
+variables only (relaxed binding, `WASICHAI_DB_*`, `WASICHAI_JWT_SECRET`); sign-in limits and token revocation on.
+Profiles `api` (worker and both schedulers off) and `worker` (on): one image, two roles. `integrations-app/Dockerfile`:
+Gradle on `eclipse-temurin:25-jdk` with the packages token as a BuildKit secret, `eclipse-temurin:25-jre` runtime as
+uid 10001, `HEALTHCHECK` on `/actuator/health`, graceful shutdown (30 s), heap at 75% of the container.
+`deploy/compose/`: PostgreSQL 18 with a volume and healthcheck, `api` and `worker`, `.env.example` documenting every
+variable. CI job "Container image (build + smoke)" builds the image and runs `.github/scripts/smoke.sh` (compose up,
+health, sign-in as the development seed's admin, the catalog lists the five connectors, compose down). Deployment guide:
+image, compose, environment variables, roles, scaling, health, shutdown. No REST change. New tests:
+`ConnectorsConfigurationTest`, `RolesTest`, `IntegrationsAppTest` (integration).
+
 ## 2026-11-05 — MCP endpoint for exposed tools
 
 `POST /api/integrations/mcp` serves the exposed AI tools over the Model Context Protocol, revision 2025-06-18,

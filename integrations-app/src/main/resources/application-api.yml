@@ -1,0 +1,10 @@
+# role "api" (SPRING_PROFILES_ACTIVE=api): serves the REST api, webhooks and the oauth callback; runs no background
+# work. scale it with traffic. at least one "worker" replica must run next to it (ADR-0028)
+wasichai:
+  integrations:
+    jobs:
+      worker-enabled: false
+    sync:
+      scheduler-enabled: false
+    workflows:
+      scheduler-enabled: false

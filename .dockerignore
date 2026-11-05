@@ -1,0 +1,14 @@
+# the image builds from sources only: no local build output, caches, secrets or vcs
+.git
+.gradle
+.kotlin
+**/build
+!**/src/**/build
+.idea
+*.iml
+.vscode
+**/.env
+**/.env.local
+*.local.env
+deploy/compose/.env
+docs

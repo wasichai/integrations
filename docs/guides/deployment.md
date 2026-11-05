@@ -1,7 +1,9 @@
 # Deployment guide
 
 How to add Wasichai Integrations to a Wasichai app and configure it: dependencies, every property, encryption keys,
-the public url, OAuth, provider apps, webhooks and scaling. Operating it day to day is in [operations](operations.md).
+the public url, OAuth, provider apps, webhooks and scaling; and how to run the example app's container image with
+Docker Compose ([below](#the-example-app-and-its-container-image)). Operating it day to day is in
+[operations](operations.md).
 
 ## Dependencies
 
@@ -273,6 +275,138 @@ All replicas share the PostgreSQL job queue (`integration_jobs`):
 - Provider calls are made with the app's own HTTP client; outbound access to the providers' hosts (and DNS) must be
   allowed.
 
+## The example app and its container image
+
+`integrations-app` is a runnable Spring Boot app built from this repository: the Wasichai starter, the integrations,
+sync, workflows and AI modules, and every shipped connector but OpenAPI. It is never published to Maven; it ships as a
+container image built from [`integrations-app/Dockerfile`](../../integrations-app/Dockerfile), and
+[`deploy/compose/`](../../deploy/compose/) runs it with PostgreSQL 18
+([ADR-0028](../adr/0028-example-app-and-image.md)). Use it to try the platform, as the base of a deployment, or as the
+reference for assembling your own app (its `ConnectorsConfiguration` is the bean declaration shown above, switched by
+properties).
+
+### Build the image
+
+The build compiles the app inside the image (Gradle on `eclipse-temurin:25-jdk`) and needs a token with
+`read:packages` for the `wasichai-*` libraries. It is a BuildKit secret: mounted for the one build step, never a build
+argument, an environment variable of the image or part of a layer.
+
+```bash
+export WASICHAI_PACKAGES_TOKEN=...   # read:packages
+docker build --secret id=packages_token,env=WASICHAI_PACKAGES_TOKEN \
+  -f integrations-app/Dockerfile -t wasichai-integrations-app .
+```
+
+The runtime image is `eclipse-temurin:25-jre` with the executable jar at `/app/app.jar`, running as the non-root user
+`app` (uid 10001), listening on `8080`. `JDK_JAVA_OPTIONS` sizes the heap to 75% of the container's memory limit
+(`-XX:MaxRAMPercentage=75.0`) and ends the process on an `OutOfMemoryError` (`-XX:+ExitOnOutOfMemoryError`) so the
+orchestrator restarts it; set `JDK_JAVA_OPTIONS` to replace those flags, `JAVA_TOOL_OPTIONS` to add some.
+
+### Run it with Docker Compose
+
+```bash
+cd deploy/compose
+cp .env.example .env     # gitignored; fill in every replace-me
+docker compose build     # needs WASICHAI_PACKAGES_TOKEN in the environment (a build secret of compose.yaml)
+docker compose up -d
+curl -s localhost:8080/actuator/health
+```
+
+`compose.yaml` starts `postgres` (`postgres:18`, data in the `pgdata` volume, `pg_isready` healthcheck), then `api`
+from the same image once the database is healthy, and `worker` once `api` is healthy (a first start migrates the
+schema once). Only `api` publishes a port (`API_PORT`, default `8080`). Generate the secrets with
+`openssl rand -base64 48` (JWT), `openssl rand -base64 32` (each encryption key) and `openssl rand -hex 24` (database
+password). The app refuses to start on the placeholder JWT secret or encryption key. `.env` is gitignored; keep it
+readable by the operator only (`chmod 600 .env`). To keep secrets out of environment variables, mount them as files
+(compose or Kubernetes secrets) and point Spring at the folder with
+`SPRING_CONFIG_IMPORT=configtree:/run/secrets/`, each file named after its property (`wasichai.security.jwt.secret`,
+`wasichai.integrations.encryption.keys.k1`).
+
+There is no first user until you make one. `WASICHAI_SEED_DEV=true` adds Wasichai's development seed (organization
+`demo`, `admin@wasichai.local` / `admin`): for a local trial and the CI smoke test only, never on a reachable host.
+Otherwise create the first organization and administrator as Wasichai's
+[build-your-app guide](https://github.com/wasichai/wasichai/blob/main/docs/guides/build-your-app.md) describes.
+
+### Environment variables
+
+The app reads only its environment. Any property of this guide or Wasichai's is set by Spring's relaxed binding:
+upper case, `.` becomes `_`, `-` is dropped (`wasichai.integrations.public-base-url` is
+`WASICHAI_INTEGRATIONS_PUBLICBASEURL`). Wasichai's database variables are its own names (`WASICHAI_DB_*`).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `WASICHAI_DB_HOST`, `WASICHAI_DB_PORT` | `localhost`, `5432` | PostgreSQL; compose sets `postgres` and `5432` |
+| `WASICHAI_DB_NAME`, `WASICHAI_DB_USERNAME` | `wasichai`, `wasichai` | database and user; compose creates both |
+| `WASICHAI_DB_PASSWORD` | `wasichai` | **set it**; compose refuses to start without it |
+| `WASICHAI_JWT_SECRET` | none | **required**: HS256 key of Wasichai's tokens, at least 32 bytes |
+| `WASICHAI_INTEGRATIONS_ENCRYPTION_KEYS_<ID>` | none | **required**: base64 of 32 bytes per key id. The id is the variable's suffix in lower case (`..._KEYS_K1` is `k1`), so only lower-case letters and digits |
+| `WASICHAI_INTEGRATIONS_ENCRYPTION_ACTIVEKEY` | none | **required**: the id new secrets are sealed with |
+| `WASICHAI_INTEGRATIONS_PUBLICBASEURL` | none | how providers reach the app; needed for OAuth and webhooks |
+| `WASICHAI_INTEGRATIONS_OAUTH_RETURNURL` | `/` | the UI's connections page |
+| `WASICHAI_WEB_CORSALLOWEDORIGINPATTERNS` | `http://localhost:*` | browser origins the API answers, comma separated |
+| `WASICHAI_SEED_DEV` | `false` | `true`: the development seed above (never in production) |
+| `SPRING_PROFILES_ACTIVE` | none | the role: `api` or `worker` (below); none runs everything in one replica |
+| `APP_CONNECTORS_<ID>_ENABLED` | `true` | `NOTION`, `SALESFORCE`, `JIRA`, `GITHUB`, `SLACK`: `false` leaves that connector out |
+| `APP_CONNECTORS_SALESFORCE_LOGINURL` | `https://login.salesforce.com` | sandboxes: `https://test.salesforce.com`, or a My Domain url |
+| `APP_CONNECTORS_SALESFORCE_APIVERSION` | newest | a fixed REST API version (`66.0`) |
+| `APP_CONNECTORS_SALESFORCE_CDCCHANNELS` | empty | `Account=/data/AccountChangeEvent,Contact=/data/ContactChangeEvent`: those objects read changes through Change Data Capture (the Pub/Sub connector, same id `salesforce`); empty polls every object |
+| `APP_CONNECTORS_JIRA_SITEURL` | empty | the site of API token connections (`https://acme.atlassian.net`); empty allows OAuth only |
+| `APP_CONNECTORS_JIRA_CLOUDID` | empty | pins one site when an OAuth grant reaches several |
+| `APP_CONNECTORS_GITHUB_WEBURL`, `APP_CONNECTORS_GITHUB_APIURL` | `https://github.com`, `https://api.github.com` | GitHub Enterprise Server: `https://ghe.example.com` and `https://ghe.example.com/api/v3` |
+| `SERVER_FORWARDHEADERSSTRATEGY` | `none` | `framework` behind a reverse proxy (client address for sign-in limits, scheme) |
+| `SPRING_LIFECYCLE_TIMEOUTPERSHUTDOWNPHASE` | `30s` | how long a stopping replica lets in-flight requests finish |
+| `JDK_JAVA_OPTIONS`, `JAVA_TOOL_OPTIONS` | see above | JVM flags |
+| `INTEGRATIONS_IMAGE`, `API_PORT` | `wasichai-integrations-app:local`, `8080` | compose only: the image both services run, the api's host port |
+
+An empty value counts as unset for the connector settings (compose passes `VAR=` as an empty string). Every other
+property of the [tables above](#properties) (`WASICHAI_INTEGRATIONS_JOBS_LEASE`, `WASICHAI_INTEGRATIONS_HTTP_TIMEOUT`...)
+and of Wasichai's core works the same way. The app turns on Wasichai's sign-in attempt limits and token revocation
+(`wasichai.security.login.enabled`, `wasichai.security.jwt.revocation`), as Wasichai recommends before production.
+
+The OpenAPI connector is not in the app: its mapping (resources, operations, security scheme) is code written per API
+([ADR-0021](../adr/0021-openapi-connector.md)). To add one, build your own app on this one's model and declare an
+`OpenApiConnector` bean there.
+
+### Roles: one image, api and worker
+
+The role is a Spring profile; the image is the same.
+
+| Profile | `jobs.worker-enabled` | `sync.scheduler-enabled` | `workflows.scheduler-enabled` | Serves |
+|---|---|---|---|---|
+| `api` | `false` | `false` | `false` | the REST API, webhooks, the OAuth callback; scale with traffic behind a load balancer |
+| `worker` | `true` | `true` | `true` | the job queue (webhook events, sync runs, workflow steps) and the schedulers; scale with the queue |
+| none | `true` | `true` | `true` | everything in one replica (a small installation) |
+
+A worker still answers HTTP (its health, and the API if a request reaches it); route traffic to `api` replicas only.
+At least one worker must run, or nothing is processed. Scale workers out (`docker compose up -d --scale worker=3`, or
+replicas in an orchestrator): job claims skip locked rows and the schedulers take a cluster lock per tick, so any
+number of replicas is safe ([workers and scaling](#workers-scheduler-and-scaling)). The worker's `jobs.lease` must
+cover the longest sync run. Every replica runs the Flyway migrations at start; Flyway holds a PostgreSQL advisory
+lock while it migrates, so replicas starting together wait for one another, and a new version's first start is the
+slow one.
+
+### Health and shutdown
+
+- `GET /actuator/health` is public (Wasichai's security chain) and reports `UP` once the database answers; details are
+  never shown. `/actuator/health/liveness` and `/actuator/health/readiness` are there for orchestrators that probe
+  them. No other actuator endpoint is exposed.
+- The image's `HEALTHCHECK` calls `/actuator/health` every 15 s after a 120 s start period (the first start migrates
+  every module). Compose's `depends_on` waits on PostgreSQL's healthcheck.
+- On `SIGTERM` (java is the container's main process) the server stops accepting connections and lets in-flight
+  requests finish for up to `spring.lifecycle.timeout-per-shutdown-phase` (30 s); compose's `stop_grace_period` is
+  40 s, so give an orchestrator at least that. A job running when its worker stops is claimed again after
+  `jobs.lease`; handlers are idempotent.
+
+### CI smoke test
+
+The CI job "Container image (build + smoke)" builds the image with `PACKAGES_TOKEN` as the BuildKit secret, then
+[`.github/scripts/smoke.sh`](../../.github/scripts/smoke.sh) writes a `.env` from `.env.example` with generated
+secrets and `WASICHAI_SEED_DEV=true`, starts the compose project and waits until every service is healthy, checks the
+worker's health from inside its container, checks that the catalog refuses a call without a token, signs in as the
+seeded admin (`POST /api/auth/login`), asserts that `GET /api/integrations/connectors` lists `github`, `jira`,
+`notion`, `salesforce` and `slack`, and takes the project down with its volume. `smoke.sh --checks-only <base-url>`
+runs the HTTP checks against an app already running with the seed, e.g. the jar on a local database.
+
 ## Checklist
 
 - [ ] Dependencies on `integrations-bom`, a starter and the connectors; connector beans declared.
@@ -280,3 +414,5 @@ All replicas share the PostgreSQL job queue (`integration_jobs`):
 - [ ] `public-base-url` (https) and `oauth.return-url` set; the callback and webhook routes reachable from the internet.
 - [ ] Each tenant's provider app registered with the redirect uri and stored as a provider config.
 - [ ] At least one replica runs the job worker; `jobs.lease` fits the longest sync run.
+- [ ] With the example image: `WASICHAI_SEED_DEV` off, secrets out of the repository, `api` and `worker` roles set,
+      a grace period of at least 40 s.
