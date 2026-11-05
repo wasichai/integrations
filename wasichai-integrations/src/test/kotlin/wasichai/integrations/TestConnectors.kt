@@ -44,4 +44,19 @@ object TestConnectors {
 
             override suspend fun accountInfo(context: ConnectorContext) = AccountInfo("acct-2")
         }
+
+    // no Authenticator: nothing can tell who the account is (issue #60)
+    fun unchecked(id: String = "test-unchecked"): Connector =
+        object : Connector {
+            override val manifest =
+                ConnectorManifest(
+                    id = id,
+                    provider = ProviderInfo("Test Unchecked"),
+                    version = "1.0.0",
+                    sdkVersion = SdkVersion.CURRENT,
+                    description = "api key test connector that cannot check its account",
+                    authMethods = listOf(AuthMethod.ApiKey()),
+                    capabilities = emptyMap()
+                )
+        }
 }

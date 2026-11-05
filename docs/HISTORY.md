@@ -2,6 +2,18 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Silent paths made visible: deletions against the direction, unchecked accounts, unreadable keys
+
+Three paths that gave up without a trace now say so (issue #60, ADR-0018). A `PROPAGATE` deletion the direction
+does not let flow opens a `DELETED` conflict and logs a warning, as `FLAG` does, instead of a silent `ORPHANED`
+link. A connection whose connector has no `Authenticator` shows `accountChecked: false`, and a test of it reports
+`accountChecked: false` and only reads its credentials back. Credentials no configured key opens mark the
+connection `NEEDS_REAUTH`/`FAILING` with `lastError` "credentials cannot be decrypted with the configured keys;
+reconnect" and act as `AuthExpired` (test `ok: false`, `409` on API calls, a permanent job failure) instead of a
+`500`. REST change (additive): `accountChecked` on `ConnectionView` and `ConnectionTestView`. Documented: provider
+config `options` are not read by any connector; a failed sync run does not change connection health. New tests in
+`SyncEngineTest` and `ConnectionApiTest`.
+
 ## 2026-11-05 — Docs: api, security model and sync semantics aligned with the code
 
 The docs now say what the code does ([#59](https://github.com/wasichai/integrations/issues/59)). `api.md` no longer

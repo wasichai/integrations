@@ -23,3 +23,4 @@ supersedes it and says so in its status line.
 - [ADR-0015: The sync engine's implementation refines links, runs, conflicts and reconciliation](0015-sync-implementation-decisions.md)
 - [ADR-0016: Jira finds its site on use, writes rich text as plain paragraphs, and claims webhooks only as implemented](0016-jira-cloud-connector.md)
 - [ADR-0017: Connectors are plain SDK libraries; the app declares their beans](0017-connectors-as-plain-libraries.md)
+- [ADR-0018: Deletions that cannot propagate, unchecked accounts and unreadable credentials are made visible](0018-silent-paths-become-visible.md)

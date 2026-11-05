@@ -139,7 +139,9 @@ To rotate:
    sealed columns, e.g. `... WHERE sealed LIKE 'v1.<oldId>.%'` on `integration_connection_credentials`, and likewise
    `client_secret_sealed` on `integration_provider_configs` and `secret_sealed` on `integration_webhook_endpoints`.
 4. Remove the old key. A secret still sealed with a removed key cannot be opened: calls on that connection fail until it
-   is reconnected (or the provider app or webhook endpoint is saved again).
+   is reconnected (or the provider app or webhook endpoint is saved again). Such a connection turns `NEEDS_REAUTH`
+   with `lastError` "credentials cannot be decrypted with the configured keys; reconnect"
+   ([api.md](../architecture/api.md#connections)).
 
 ## Public base url, OAuth and the return url
 
@@ -159,7 +161,8 @@ each tenant registers an OAuth app (a Notion public integration, a Salesforce co
 above, then a tenant administrator stores it with `PUT /api/integrations/provider-configs/{connectorId}`
 (`clientId`, write-only `clientSecret`, extra `scopes`, `options`). The catalog shows `needsProviderConfig` and
 `providerConfigured` per connector. There is no app-wide default provider app; the stored `options` are kept and
-returned but no shipped connector reads them yet. A provider app cannot be deleted while connections to its connector
+returned for the app's own use: neither the platform nor a shipped connector reads them, and they do not reach a
+connector's context. A provider app cannot be deleted while connections to its connector
 exist (`409`).
 
 Connector specifics:

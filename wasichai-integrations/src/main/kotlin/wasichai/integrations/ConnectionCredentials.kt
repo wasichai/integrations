@@ -25,7 +25,7 @@ class ConnectionCredentials(
     private val log = LoggerFactory.getLogger(javaClass)
 
     suspend fun headers(connection: Connection): Map<String, String> {
-        val stored = connections.credentials(connection.organizationId, connection.id) ?: throw ConnectorException.AuthExpired("connection has no credentials")
+        val stored = stored(connection)
         return when (connection.authType) {
             AuthType.API_KEY -> {
                 val method =
@@ -48,6 +48,29 @@ class ConnectionCredentials(
         }
     }
 
+    // opens the stored secrets without calling the provider: a test of a connector that cannot check its account
+    suspend fun check(connection: Connection) {
+        stored(connection)
+    }
+
+    private suspend fun stored(connection: Connection): StoredCredentials =
+        try {
+            connections.credentials(connection.organizationId, connection.id) ?: throw ConnectorException.AuthExpired("connection has no credentials")
+        } catch (e: CredentialUnreadableException) {
+            unreadable(connection, e)
+        }
+
+    // no configured key opens the secret (a removed key, a tampered row): only new credentials help, so the
+    // connection says so instead of failing every call with an unexpected error (issue #60)
+    private suspend fun unreadable(
+        connection: Connection,
+        e: CredentialUnreadableException
+    ): Nothing {
+        log.warn("integrations: credentials of connection {} cannot be opened ({}); marked NEEDS_REAUTH", connection.id, e.message)
+        connections.markFailed(connection.organizationId, connection.id, ConnectionStatus.NEEDS_REAUTH, ConnectionHealth.FAILING, UNREADABLE, clock.instant())
+        throw ConnectorException.AuthExpired(UNREADABLE)
+    }
+
     fun canRefresh(connection: Connection): Boolean =
         connection.authType == AuthType.OAUTH2_AUTHORIZATION_CODE || connection.authType == AuthType.OAUTH2_CLIENT_CREDENTIALS
 
@@ -58,11 +81,16 @@ class ConnectionCredentials(
         staleToken: String?
     ): String? {
         var refused: TokenRefusedException? = null
+        var unopened: CredentialUnreadableException? = null
         val token =
             tx.run {
                 val locked =
-                    connections.credentials(connection.organizationId, connection.id, forUpdate = true)
-                        ?: throw ConnectorException.AuthExpired("connection has no credentials")
+                    try {
+                        connections.credentials(connection.organizationId, connection.id, forUpdate = true)
+                    } catch (e: CredentialUnreadableException) {
+                        unopened = e
+                        return@run null
+                    } ?: throw ConnectorException.AuthExpired("connection has no credentials")
                 if (locked.secrets.accessToken != staleToken && !expiring(locked.accessExpiresAt)) return@run locked.secrets.accessToken
                 val grant =
                     try {
@@ -86,6 +114,7 @@ class ConnectionCredentials(
                 )
                 grant.accessToken
             }
+        unopened?.let { unreadable(connection, it) }
         refused?.let { e ->
             log.warn("integrations: refresh refused for connection {} ({})", connection.id, e.error)
             connections.markFailed(
@@ -134,4 +163,8 @@ class ConnectionCredentials(
     fun expiry(grant: TokenGrant): Instant? = grant.expiresInSeconds?.let { clock.instant().plusSeconds(it) }
 
     private fun expiring(expiresAt: Instant?): Boolean = expiresAt != null && !expiresAt.isAfter(clock.instant().plus(properties.refreshSkew))
+
+    companion object {
+        const val UNREADABLE = "credentials cannot be decrypted with the configured keys; reconnect"
+    }
 }

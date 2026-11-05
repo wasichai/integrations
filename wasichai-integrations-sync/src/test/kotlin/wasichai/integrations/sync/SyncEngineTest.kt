@@ -346,6 +346,28 @@ class SyncEngineTest : SyncIntegrationTest() {
     }
 
     @Test
+    fun `a deletion that may not propagate against the direction opens a DELETED conflict`() {
+        val pair = Pair()
+        val ana = memA.put(pair.a, res, mapOf("name" to text("Ana")))
+        val definition = define(pair, mappings = listOf(mapping("name", owner = "A")), direction = "A_TO_B", deletePolicy = "PROPAGATE")
+        sync(definition)
+        val inB = memB.records(pair.b, res).single().id
+        // B never writes A: deleting there cannot flow, and must not vanish silently either (issue #60)
+        memB.remove(pair.b, res, inB)
+        memA.put(pair.a, res, mapOf("name" to text("Ana Maria")), ana)
+        val run = sync(definition)
+        assertEquals("SUCCEEDED", run.get("status").asString(), run.toString())
+        assertEquals(1, run.get("conflicts").asInt(), run.toString())
+        assertEquals(1, memA.records(pair.a, res).size, "nothing is deleted in A")
+        assertTrue(memB.records(pair.b, res).isEmpty(), "nothing is created again in B while the conflict is open")
+        val conflict = conflicts(definition).single()
+        assertEquals("DELETED", conflict.get("kind").asString())
+        val resolved =
+            call(client, HttpMethod.POST, "/api/integrations/conflicts/${conflict.get("id").asString()}/resolve", tenant.admin, emptyMap<String, Any>(), 200)
+        assertEquals("UNLINK", resolved.get("resolution").get("choice").asString())
+    }
+
+    @Test
     fun `match on links existing records instead of duplicating them`() {
         val pair = Pair()
         memA.put(pair.a, res, mapOf("name" to text("Ana"), "email" to text("ana@x.test")))
