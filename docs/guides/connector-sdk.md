@@ -171,11 +171,13 @@ Shipped connectors today:
 | `notion` (`integrations-connector-notion`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth code without PKCE, API key |
 | `salesforce` (`integrations-connector-salesforce`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `UPSERT` | OAuth code with PKCE |
 | `jira` (`integrations-connector-jira`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `ACTIONS`, `WEBHOOKS`¹ | OAuth 3LO, API token |
+| `github` (`integrations-connector-github`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth code with PKCE, PAT |
 
 Salesforce's change feed polls `SystemModstamp` and the deleted records; Change Data Capture is planned
 ([#14](https://github.com/wasichai/integrations/issues/14), [ADR-0014](../adr/0014-salesforce-change-capture.md)). Jira's
 choices (site lookup, webhook verification, rich text as plain text) are in
-[ADR-0016](../adr/0016-jira-cloud-connector.md). GitHub, Slack and OpenAPI-based connectors are planned
+[ADR-0016](../adr/0016-jira-cloud-connector.md). GitHub's (user tokens only, a fresh-query change feed, deletes refused)
+are in [ADR-0019](../adr/0019-github-connector.md). Slack and OpenAPI-based connectors are planned
 ([#15](https://github.com/wasichai/integrations/issues/15)).
 
 ¹ Jira webhooks are `IMPLEMENTED`, not `TESTED`: their verification follows secondary sources (ADR-0016).

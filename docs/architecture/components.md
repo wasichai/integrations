@@ -53,6 +53,10 @@ writes round-trip, error responses map to the right `ConnectorError`.
   issue fields (custom ones included), enhanced JQL search, incremental polling on `updated`, issue CRUD with rich text
   as plain-text ADF, transitions and dynamic webhooks as actions, webhooks verified by HMAC or the app's JWT
   ([ADR-0016](../adr/0016-jira-cloud-connector.md)).
+- `integrations-connector-github`: github.com or GitHub Enterprise Server by OAuth app or GitHub App user token, or a
+  personal access token; repositories and their issues (pull requests left out), `Link` paging, a fresh-query feed on
+  `updated_at`, issue create and edit (no delete in the REST API), webhooks verified by `X-Hub-Signature-256`
+  ([ADR-0019](../adr/0019-github-connector.md)).
 
 ## Frontend (wasichai/integrations-ui)
 
