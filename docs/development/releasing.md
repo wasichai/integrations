@@ -19,8 +19,9 @@ by `integrations-bom`. The npm packages are released from
 `integrations-bom`, `integrations-connector-sdk`, `integrations-connector-sdk-test`, `integrations-connector-notion`,
 `integrations-connector-salesforce`, `integrations-connector-salesforce-pubsub`, `integrations-connector-jira`,
 `integrations-connector-github`, `integrations-connector-slack`, `integrations-connector-openapi`, `wasichai-integrations`,
-`wasichai-integrations-sync`, `wasichai-integrations-workflows`, `wasichai-spring-boot-starter-integrations`,
-`wasichai-spring-boot-starter-integrations-sync`, `wasichai-spring-boot-starter-integrations-workflows`. Group `wasichai`.
+`wasichai-integrations-sync`, `wasichai-integrations-workflows`, `wasichai-integrations-ai`,
+`wasichai-spring-boot-starter-integrations`, `wasichai-spring-boot-starter-integrations-sync`,
+`wasichai-spring-boot-starter-integrations-workflows`, `wasichai-spring-boot-starter-integrations-ai`. Group `wasichai`.
 `integrations-bom` constrains every published module by itself (any project but the BOM and the end-to-end suite).
 `integrations-integration-tests` is never published.
 
@@ -45,6 +46,7 @@ dependencies {
     implementation("wasichai:wasichai-spring-boot-starter-integrations")
     implementation("wasichai:wasichai-spring-boot-starter-integrations-sync")
     implementation("wasichai:wasichai-spring-boot-starter-integrations-workflows")
+    implementation("wasichai:wasichai-spring-boot-starter-integrations-ai")
     implementation("wasichai:integrations-connector-notion")
     implementation("wasichai:integrations-connector-salesforce")          // or -salesforce-pubsub for change data capture
     implementation("wasichai:integrations-connector-jira")

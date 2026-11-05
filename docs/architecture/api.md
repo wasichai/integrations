@@ -2,7 +2,8 @@
 
 The contract with [integrations-ui](https://github.com/wasichai/integrations-ui), as the controllers implement it. Routes
 exist only when the module is on the classpath and `wasichai.integrations.enabled` (or `wasichai.integrations.sync.enabled`
-for the synchronization routes, `wasichai.integrations.workflows.enabled` for the workflow routes) is not false;
+for the synchronization routes, `wasichai.integrations.workflows.enabled` for the workflow routes,
+`wasichai.integrations.ai.enabled` for the AI tool routes) is not false;
 otherwise they answer `404` to an authenticated caller, as in
 [Wasichai](https://github.com/wasichai/wasichai/blob/main/docs/api/rest.md).
 
@@ -510,6 +511,86 @@ deep. Values are literals (string, number, boolean, null).
   when the workflow runs; a connector action's input is not checked (the manifest declares no input schema).
 
 A missing resource is a violation; any other provider failure is mapped as above.
+
+## AI tools
+
+Module `wasichai-integrations-ai` ([ADR-0026](../adr/0026-ai-tools.md)), base `/api/integrations/ai`. A tool is a
+connector action or one record operation that a tenant administrator exposed; nothing is exposed by default. Every
+execution, from here or from the MCP endpoint ([#44](https://github.com/wasichai/integrations/issues/44)), goes through
+the same policy and is recorded. Guide: [AI tools](../guides/ai-tools.md).
+
+| Method | Path | Perm | Answer |
+|---|---|---|---|
+| GET | `/ai/tools` | R | `200` array of `ToolView`, by name; a manager sees all, anyone else the enabled tools a role of theirs may call |
+| POST | `/ai/tools` | M | `201` `ToolView` |
+| GET | `/ai/tools/{name}` | R | `200` with `ETag`; `404` also for a tool the caller may not call |
+| PUT | `/ai/tools/{name}` | M | `If-Match` required → `200` with `ETag`; replaces the whole tool (it may be renamed) |
+| DELETE | `/ai/tools/{name}` | M | `204`; its executions stay |
+| POST | `/ai/tools/{name}/execute` | caller | body = the input object → `200` `ExecutionView` that ran, `202` waiting for approval |
+| GET | `/ai/executions` | R | `200` `{content: [ExecutionView], nextCursor?}`; a manager reads all, anyone else their own |
+| GET | `/ai/executions/{id}` | R | `200` `ExecutionView`; `404` for someone else's unless manager |
+| POST | `/ai/executions/{id}/approve` | M | `200` `ExecutionView` that ran; `409` when not `PENDING_APPROVAL`, or the tool was deleted, disabled or changed |
+| POST | `/ai/executions/{id}/reject` | M | body `{reason?}` (≤ 1000) → `200` `ExecutionView` `REJECTED`; `409` when not `PENDING_APPROVAL` |
+
+**caller**: an authenticated member holding one of the tool's `allowedRoles`, or `MANAGE_ORGANIZATION`.
+
+`ToolRequest` (POST and PUT, the whole tool every time): `{name, description, connectionId, action? | (resource,
+operation), externalIdField?, inputSchema?, allowedRoles?, approvalRequired?, rateLimitPerMinute?, enabled?}`.
+
+- `name` `^[a-z][a-z0-9_]{0,63}$`, unique in the tenant (`409` when taken); `description` 1–1000 characters.
+- `connectionId` one of the tenant's connections whose connector is installed.
+- Either `action`, a connector action the connector declares and implements (`ACTIONS`), with `inputSchema` required;
+  or `resource` and `operation` `read | list | create | update | upsert | delete` (any case), which the connector
+  declares and implements (`READ`, `WRITE`, `UPSERT`), on a resource it declares or discovers; `inputSchema` must be
+  left out (it is derived). `upsert` needs `externalIdField`, an external id field of the resource. A write other than
+  `delete` needs a connector with discovery. A resource the connector describes as missing is `400`; another provider
+  failure is mapped as above.
+- `allowedRoles` role names of the tenant (case-insensitive, stored upper case), at most 50; default empty: managers only.
+- `approvalRequired` default `true` for actions, create, update, upsert and delete, `false` for read and list.
+- `rateLimitPerMinute` 1–10000, default 60, per tool and per replica. `enabled` default `true`.
+
+Every violation is `400` with its field (`allowedRoles[0]`, `inputSchema.properties.x.pattern`).
+
+`ToolView`: `{id, name, description, connectionId, kind: ACTION | RESOURCE, action?, resource?, operation?,
+externalIdField?, inputSchema, allowedRoles, approvalRequired, rateLimitPerMinute, enabled, version, createdAt,
+updatedAt}`.
+
+**Input schemas** are a JSON Schema subset: `type` (`object`, `string`, `number`, `integer`, `boolean`, `array`),
+`properties`, `required`, `enum` (1–100), `minLength`, `maxLength`, `format` (`date`, `date-time`), `minimum`,
+`maximum`, `items`, `minItems`, `maxItems`, `title`, `description` (`$schema` is accepted and dropped). The root is an
+object; at most 8 deep and 32 KiB. Objects are closed: `additionalProperties` may only be `false`, and is added when
+absent. Any other keyword is `400`, as is a property named like a credential (`password`, `secret`, `token`,
+`apiKey`, `authorization`, `credential`, `cookie`, …). A record tool's derived input:
+
+| Operation | Input |
+|---|---|
+| `read`, `delete` | `{id}` |
+| `list` | `{cursor?, pageSize? 1–100 (20)}` |
+| `create` | `{fields: {…}}`, the resource's required fields required |
+| `update` | `{id, fields: {…}}` |
+| `upsert` | `{externalId, fields: {…}}` (the external id field itself is not in `fields`) |
+
+`fields` holds the resource's writable fields as typed properties (text → string, number, boolean, date and date-time
+→ string with `format`, choice → string with `enum`, multi-choice → array, json → object); read-only, reference and
+credential-like fields are left out. Outputs: `read` `{record: {id, version, modifiedAt, fields} | null}`, `list`
+`{records, nextCursor}`, writes `{id, version, modifiedAt, created}`, `delete` `{id, deleted: true}`, an action its own
+JSON.
+
+**Execute** checks, in order: the tool exists in the caller's tenant (`404`), the caller may call it (`403`), it is
+enabled and its connection `ACTIVE` (`409`), its rate limit (`429` with `Retry-After`), the body fits the schema
+(`400`, `errors` with paths such as `input.fields.name`; an empty body is `{}`; at most 64 KiB). Then the execution is
+recorded and either runs (`200`) or waits for a manager (`202`). A provider failure is not an HTTP error: the answer is
+`200` with status `FAILED`, `error` (the mapped message) and `errorKind` (`rate_limited`, `auth_expired`, `not_found`,
+`permission_denied`, `transient`, `conflict`, `permanent`, `unsupported`, `unexpected`, `cancelled`).
+
+`ExecutionView`: `{id, toolId?, toolName, connectionId, callerId?, serviceAccount?, status: PENDING_APPROVAL | RUNNING |
+SUCCEEDED | FAILED | REJECTED, input, output?, outputTruncated, error?, errorKind?, decidedBy?, decidedAt?, reason?,
+correlationId?, createdAt, startedAt?, finishedAt?}`. The answers of `execute` and `approve` carry the provider's whole
+`output`; a stored execution (list, get, reject) carries its summary: credential-like keys masked as `"***"`, at most
+16 KiB, else a truncated string with `outputTruncated: true`.
+
+`GET /ai/executions` filters `status`, `tool` (the name); pages newest first by `(createdAt, id)` with `limit` (1–200,
+default 50) and `cursor` (the previous page's `nextCursor`; `400` for any other value).
 
 ## Not implemented yet
 

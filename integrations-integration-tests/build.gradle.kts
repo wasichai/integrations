@@ -16,6 +16,7 @@ dependencies {
     testImplementation(project(":wasichai-integrations"))
     testImplementation(project(":wasichai-integrations-sync"))
     testImplementation(project(":wasichai-integrations-workflows"))
+    testImplementation(project(":wasichai-integrations-ai"))
     testImplementation(project(":integrations-connector-notion"))
     testImplementation(project(":integrations-connector-salesforce"))
     testImplementation(project(":integrations-connector-sdk-test"))

@@ -30,8 +30,13 @@ class AppBootsTest : WasichaiIntegrationTest() {
             .exchange()
             .expectStatus()
             .isOk
-        // every integrations module answers next to the others (workflows migrate after sync)
-        listOf("/api/integrations/connectors", "/api/integrations/sync-definitions", "/api/integrations/workflows").forEach {
+        // every integrations module answers next to the others (workflows migrate after sync, AI tools after workflows)
+        listOf(
+            "/api/integrations/connectors",
+            "/api/integrations/sync-definitions",
+            "/api/integrations/workflows",
+            "/api/integrations/ai/tools"
+        ).forEach {
             client
                 .get()
                 .uri(it)

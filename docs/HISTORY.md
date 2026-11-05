@@ -2,6 +2,24 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — AI tool catalog and execution policy
+
+New module `wasichai-integrations-ai` and starter `wasichai-spring-boot-starter-integrations-ai`
+([#43](https://github.com/wasichai/integrations/issues/43), ADR-0026). A tenant administrator exposes a connector
+action, or one record operation (`read`, `list`, `create`, `update`, `upsert`, `delete`) on one resource, as a named
+tool; nothing is exposed by default. Exposing checks the tenant's connection, the connector's declared and implemented
+capability, action or resource, the tenant's roles and the input schema: a closed JSON Schema subset (supplied for
+actions, derived from the resource schema for records; no credential-like properties). `ToolExecutions` is the only
+execution path (MCP, #44, will call it): tenant (`404`), allowed role or `MANAGE_ORGANIZATION` (`403`), enabled and an
+active connection (`409`), a per-tool, per-replica rate limit (`429`), the input (`400` with field paths), then the run
+through the SDK. Actions and writes require approval by default (`202 PENDING_APPROVAL`, approve runs once, a second is
+`409`; reject). Every execution is a row (input, status, masked output summary ≤ 16 KiB, mapped error, decision,
+correlation id) and Wasichai `audit_log` entries; refusals are counted. A connection a tool uses is not deleted under
+it (`409`). Flyway history `integrations_ai` (order 230). REST change (additive): `/api/integrations/ai/tools` (CRUD,
+`execute`) and `/api/integrations/ai/executions` (paged list, get, approve, reject). New tests: `ToolSchemaTest`,
+`ToolRateLimitsTest`, `WasichaiIntegrationsAiAutoConfigurationTest`, `ToolApiTest`, `AiDisabledTest`; `AppBootsTest`
+reads the AI tool routes too.
+
 ## 2026-11-05 — Workflow execution, triggers and approvals
 
 Published workflows now run ([#42](https://github.com/wasichai/integrations/issues/42), ADR-0025). A run is a row

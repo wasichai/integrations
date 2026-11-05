@@ -39,14 +39,23 @@ Flyway history and carry `organization_id uuid not null` with an index leading o
 | `integration_workflow_step_executions` | execution_id FK, org, step_id, step_type, status (PENDING, RUNNING, WAITING, SUCCEEDED, FAILED, SKIPPED), attempt, input/output jsonb, error, idempotency_key, scope jsonb, arrivals int[], wait_until, decided_by | PK (execution_id, step_id): no loops, a step runs at most once per run; a join's arrivals are counted in its row (ADR-0025) |
 
 
+## wasichai-integrations-ai (`db/wasichai/integrations-ai`)
+
+| Table | Key columns | Constraints and notes |
+|---|---|---|
+| `integration_ai_tools` | id, org, connection_id FK, name, description, kind (ACTION, RESOURCE), action, resource, operation, external_id_field, input_schema jsonb, field_types jsonb, allowed_roles jsonb, approval_required, rate_limit_per_minute, enabled, version, created_by | UNIQUE (org, name); name `^[a-z][a-z0-9_]{0,63}$`; ACTION has only action, RESOURCE resource and operation; the connection is held (`ConnectionUsage`) |
+| `integration_ai_tool_executions` | id, org, tool_id FK (SET NULL), tool_name, tool_version, connection_id, caller_id, service_account, input jsonb, status (PENDING_APPROVAL, RUNNING, SUCCEEDED, FAILED, REJECTED), output jsonb (masked summary ≤ 16 KiB), output_truncated, error, error_kind, decided_by, decided_at, reason, correlation_id, created_at, started_at, finished_at | index (org, created_at desc, id desc) and (org, caller_id, created_at desc); a decision moves PENDING_APPROVAL by a conditional update, once |
+
+## Rules
+
 - **Optimistic locking** on rows people edit (`provider_configs`, `connections`, `sync_definitions`, `record_links`,
-  `integration_workflow_definitions`):
+  `integration_workflow_definitions`, `integration_ai_tools`):
   `version` column, `If-Match` over REST, `412` on mismatch, following
   [wasichai ADR-051](https://github.com/wasichai/wasichai/blob/main/docs/adr/0051-optimistic-locking-and-partial-update-of-records.md).
 - **Idempotency** lives in unique constraints, not in application checks: job dedupe keys, event provider ids or body
   hashes, link create tokens, single-use OAuth states.
 - **Soft delete:** none. A disconnected connection keeps its row with status `DISABLED` until deleted; deleting a
-  connection deletes its credentials and refuses while a sync definition or a workflow uses it (`409`, the stance of
+  connection deletes its credentials and refuses while a sync definition, a workflow or an AI tool uses it (`409`, the stance of
   [wasichai ADR-017](https://github.com/wasichai/wasichai/blob/main/docs/adr/0017-metadata-deletion-refuses-instead-of-cascading.md)).
 - **Retention:** consumed or expired OAuth states purged after a day; succeeded jobs and processed events purged after
   a configured retention (default 30 days); runs kept 90 days; conflicts and links kept while the definition exists.

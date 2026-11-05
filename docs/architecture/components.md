@@ -64,6 +64,19 @@ validation; execution on the integrations job queue ([ADR-0025](../adr/0025-work
 | `WorkflowScheduler` | cluster-locked tick that fires schedule triggers once |
 | `WorkflowRunService` / `WorkflowWebhookController` | manual run, pause, history, approvals, cancel; the workflow's public webhook url |
 
+## wasichai-integrations-ai
+
+AI tools ([ADR-0026](../adr/0026-ai-tools.md)): explicitly exposed connector actions and record operations, and the
+one execution path the REST API and the MCP endpoint ([#44](https://github.com/wasichai/integrations/issues/44)) share.
+
+| Component | Responsibility |
+|---|---|
+| `ToolSchema` | the JSON Schema subset: checks a schema when exposed, validates an input, derives a record tool's schema |
+| `ToolCatalog` | exposures with optimistic locking: connection, connector capabilities, resource, roles, name; per-caller visibility |
+| `ToolExecutions` | the policy (tenant, roles, enabled, rate limit, input), the run through the SDK, approvals, executions and audit |
+| `ToolRateLimits` | calls per minute per tool, per replica, refusing with a wait |
+| `ToolRepository` | tools, executions; `ConnectionUsage` for connections a tool uses |
+
 ## Connectors
 
 - `integrations-connector-notion`: OAuth, data sources, page properties, webhooks (HMAC), rate limits.

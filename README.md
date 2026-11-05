@@ -10,8 +10,8 @@ Status: under construction. See [docs/product/](docs/product/) and the issues fo
 
 - [Guides](docs/guides/README.md): [user guide](docs/guides/user-guide.md),
   [connector SDK](docs/guides/connector-sdk.md), [writing a connector](docs/guides/connector-developer.md),
-  [synchronization](docs/guides/sync.md), [workflows](docs/guides/workflows.md), [deployment](docs/guides/deployment.md),
-  [operations](docs/guides/operations.md).
+  [synchronization](docs/guides/sync.md), [workflows](docs/guides/workflows.md), [AI tools](docs/guides/ai-tools.md),
+  [deployment](docs/guides/deployment.md), [operations](docs/guides/operations.md).
 - Everything else (architecture, REST API, ADRs, product): [docs/README.md](docs/README.md).
 
 ## Build
