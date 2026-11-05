@@ -2,7 +2,8 @@
 
 The contract with [integrations-ui](https://github.com/wasichai/integrations-ui), as the controllers implement it. Routes
 exist only when the module is on the classpath and `wasichai.integrations.enabled` (or `wasichai.integrations.sync.enabled`
-for the synchronization routes) is not false; otherwise they answer `404` to an authenticated caller, as in
+for the synchronization routes, `wasichai.integrations.workflows.enabled` for the workflow routes) is not false;
+otherwise they answer `404` to an authenticated caller, as in
 [Wasichai](https://github.com/wasichai/wasichai/blob/main/docs/api/rest.md).
 
 ## Conventions (inherited from Wasichai)
@@ -17,7 +18,7 @@ for the synchronization routes) is not false; otherwise they answer `404` to an 
 - `X-Correlation-Id`: Wasichai's filter accepts one from the caller or makes one, and echoes it on every response.
 - Lists are plain JSON arrays, newest or alphabetical first, with an optional `limit` where noted. Only `/events` pages,
   with a keyset cursor (`{content, nextCursor}`).
-- Versioned resources (provider configs, sync definitions) answer `ETag: "<version>"`; their `PUT` needs
+- Versioned resources (provider configs, sync definitions, workflows) answer `ETag: "<version>"`; their `PUT` needs
   `If-Match: "<version>"` (`W/` and quotes are tolerated).
 - Permission column: **R** reader = any authenticated member of the tenant; **M** manager = `MANAGE_ORGANIZATION`
   (`ADMIN` holds it), never a service account (Wasichai ADR-043); **P** public. See `IntegrationsAccess`.
@@ -142,9 +143,10 @@ inside a `200`); a `2xx` with neither is a malformed answer, a permanent failure
 on the run and the definition's status.
 
 `DELETE` answers `409` naming what still uses the connection (each sync definition, in any status, with a side on
-it); nothing is revoked or deleted then, so no link, run or open conflict disappears with it. Otherwise it revokes the
-token at the provider when the connector declares a revoke url (best effort), then deletes. `test` is a manager's
-action because it calls the provider and changes the connection's status and health.
+it; each workflow whose draft or published version names it); nothing is revoked or deleted then, so no link, run or
+open conflict disappears with it. Otherwise it revokes the token at the provider when the connector declares a revoke
+url (best effort), then deletes. `test` is a manager's action because it calls the provider and changes the
+connection's status and health.
 
 ### OAuth
 
@@ -368,6 +370,101 @@ records them, and the link is `LINKED` again. A `DELETED` conflict ignores the b
 (`resolution: {choice: "UNLINK"}`) and the conflict stays as history. Errors: `400` invalid choice, a missing custom
 value, a pick other than `A` or `B`, or a pick of B without an inverse; `404` the conflict, or its link, no longer
 exists; `409` already resolved (or resolved meanwhile), a record gone or changed while resolving.
+
+## Workflows
+
+Module `wasichai-integrations-workflows` ([ADR-0022](../adr/0022-integration-workflows.md)). A workflow is a draft
+graph that is validated and published into immutable, numbered versions. **Published workflows do not run yet**:
+execution on the integrations job queue is [#42](https://github.com/wasichai/integrations/issues/42). Guide:
+[workflows](../guides/workflows.md).
+
+| Method | Path | Perm | Answer |
+|---|---|---|---|
+| GET | `/workflows` | R | `200` array of `WorkflowView`, by name |
+| POST | `/workflows` | M | `201` `WorkflowView`, status `DRAFT` |
+| GET | `/workflows/{id}` | R | `200` with `ETag` |
+| PUT | `/workflows/{id}` | M | `If-Match` required → `200` with `ETag`; changes the draft only, never a version |
+| DELETE | `/workflows/{id}` | M | `204`; deletes its versions and trigger |
+| POST | `/workflows/{id}/validate` | M | `200` `{valid, errors: [{field, message}]}` for the draft |
+| POST | `/workflows/{id}/publish` | M | `201` `WorkflowVersionView` of the next number; `If-Match` optional |
+| GET | `/workflows/{id}/versions` | R | `200` array of `{number, publishedAt, publishedBy}`, newest first |
+| GET | `/workflows/{id}/versions/{n}` | R | `200` `WorkflowVersionView`; `404` no such version |
+
+`WorkflowRequest`: `{name, graph}`. `name` 1–200 (trimmed). `graph` a JSON object of at most 256 KiB, absent means
+`{}`. Create and update check only that (`400`): a draft may be half built. `PUT` without `If-Match` or with a stale
+version is `412`.
+
+`WorkflowView`: `{id, name, status: DRAFT | PUBLISHED, graph, publishedVersion, unpublishedChanges, version, createdAt,
+updatedAt}`. `publishedVersion` is null until the first publish; `unpublishedChanges` is true while the draft differs
+from that version (compared as JSON, so key order does not count). Publishing bumps `version`.
+
+`WorkflowVersionView`: `{workflowId, number, graph, publishedAt, publishedBy}`. A version never changes, and the
+database refuses an update of one.
+
+`publish` validates the draft (as `validate`) and answers `422` with the violations when it does not; `409` when the
+draft is already the published version; `412` when `If-Match` is stale or the draft changed while it was validated.
+It stores the draft as version `publishedVersion + 1` and replaces the workflow's trigger row in one transaction.
+
+### Graph
+
+```json
+{
+  "trigger": {"type": "event", "connectionId": "…", "eventType": "message.created", "next": "check"},
+  "steps": [
+    {"id": "check", "type": "branch", "condition": {"op": "exists", "ref": "trigger.payload.email"}, "then": "upsert", "else": "done"},
+    {"id": "upsert", "type": "action", "connectionId": "…",
+     "write": {"resource": "contacts", "operation": "upsert", "externalIdField": "extId", "externalId": {"ref": "trigger.payload.id"}},
+     "input": {"email": {"ref": "trigger.payload.email"}, "tier": {"value": "gold"}}, "next": "notify", "onError": "done"},
+    {"id": "notify", "type": "action", "connectionId": "…", "action": "send_message",
+     "input": {"text": {"ref": "steps.upsert.output.id"}}, "next": "done"},
+    {"id": "done", "type": "end"}
+  ]
+}
+```
+
+| Trigger `type` | Keys |
+|---|---|
+| `event` | `connectionId`, `eventType` (one of the connector's declared webhook events) |
+| `webhook` | none yet (its url arrives with #42) |
+| `schedule` | `cron` (Spring six fields, at most once a minute), `zone` (default `UTC`) |
+| `manual` | none |
+
+Every trigger has `next`, the first step.
+
+| Step `type` | Keys | Edges |
+|---|---|---|
+| `action` | `connectionId`; `action` (a declared connector action) **or** `write`: `{resource, operation: create \| update \| upsert \| delete, recordId?, externalIdField?, externalId?}`; `input`: `{field: operand}` (≤ 100) | `next`, `onError?` |
+| `condition` | `condition`; the run goes on when it holds and ends otherwise | `next`, `onError?` |
+| `branch` | `condition` | `then`, `else`, `onError?` |
+| `parallel` | `branches` (2–20 step ids), `join` (where every branch meets) | `branches[i]`, `onError?` |
+| `delay` | `duration` ISO-8601, 1 s to 30 days | `next`, `onError?` |
+| `approval` | `title` 1–200, `timeout?` 1 min to 30 days | `next` (approved), `rejected?`, `onError?` |
+| `end` | | none |
+
+Step ids match `[A-Za-z][A-Za-z0-9_-]{0,63}`; at most 200 steps. An operand is `{"ref": "<path>"}` or
+`{"value": <json>}`. A path is `trigger[.field…]` or `steps.<id>[.field…]`. `update` and `delete` need `recordId`,
+`upsert` needs `externalIdField` and `externalId`, `delete` takes no input, `create` at least one field.
+
+Conditions are a closed set, never an expression: `{"op": "equals" | "notEquals", "ref", "value"}`, `{"op": "exists",
+"ref"}`, `{"op": "in", "ref", "values": [1–100 literals]}`, `{"op": "gt" | "lt", "ref", "value"}` (a number, an ISO date
+or an ISO date-time with offset), `{"op": "and" | "or", "conditions": [1–100]}`, `{"op": "not", "condition"}`; at most 8
+deep. Values are literals (string, number, boolean, null).
+
+`validate` (and `publish`) reports every problem with its path, e.g. `graph.steps[2].input.email`:
+
+- shape: exactly one trigger object, known types, required keys, ids, durations, cron and zone;
+- edges: every edge (and `trigger.next`, `join`) names an existing step, ids are unique, every step is reachable from
+  the trigger, no edge closes a cycle (no loops), each parallel branch reaches its join;
+- references: `steps.<id>` names an `action` or `approval` step upstream of the step reading it;
+- connections: each is the tenant's (another tenant's is "unknown connection") and its connector is installed; an event
+  trigger's connector declares `WEBHOOKS` and the event type; an action's connector declares `ACTIONS` and the action;
+  a write's connector declares `WRITE` (`UPSERT` for an upsert) and the resource (or discovers resources);
+- schema, for writes on a connector with discovery (called only when all of the above hold): the resource exists, each
+  input field exists and is not read-only, a literal fits the field type (and a choice's options), a create sets every
+  required field, an upsert's `externalIdField` exists and is an external id field. A reference's type is known only
+  when the workflow runs; a connector action's input is not checked (the manifest declares no input schema).
+
+A missing resource is a violation; any other provider failure is mapped as above.
 
 ## Not implemented yet
 

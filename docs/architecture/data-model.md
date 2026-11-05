@@ -28,15 +28,23 @@ Flyway history and carry `organization_id uuid not null` with an index leading o
 | `sync_runs` | id, org, definition_id, kind, status, started_at, finished_at, counts jsonb, error, correlation_id | index (definition_id, started_at desc) |
 | `sync_conflicts` | id, org, link_id, definition_id, kind (FIELDS, DELETED, ORPHANED_CREATE), fields jsonb (a, b, base per field), status, detected_at, resolved_by, resolved_at, resolution jsonb | one OPEN conflict per link (partial unique index) |
 
-## Rules
+## wasichai-integrations-workflows (`db/wasichai/integrations-workflows`)
 
-- **Optimistic locking** on rows people edit (`provider_configs`, `connections`, `sync_definitions`, `record_links`):
+| Table | Key columns | Constraints and notes |
+|---|---|---|
+| `integration_workflow_definitions` | id, org, name, status (DRAFT, PUBLISHED), graph jsonb (the draft), published_version, version, created_by | PUBLISHED exactly when published_version is set |
+| `integration_workflow_versions` | definition_id FK, org, number, graph jsonb, published_at, published_by | PK (definition_id, number); an update trigger refuses any change but clearing published_by |
+| `integration_workflow_triggers` | definition_id PK/FK, org, version_number, type (EVENT, WEBHOOK, SCHEDULE, MANUAL), connection_id, event_type, config jsonb | the published version's trigger, replaced on publish; FK (definition_id, version_number) to versions; index (connection_id, event_type) for events |
+
+
+- **Optimistic locking** on rows people edit (`provider_configs`, `connections`, `sync_definitions`, `record_links`,
+  `integration_workflow_definitions`):
   `version` column, `If-Match` over REST, `412` on mismatch, following
   [wasichai ADR-051](https://github.com/wasichai/wasichai/blob/main/docs/adr/0051-optimistic-locking-and-partial-update-of-records.md).
 - **Idempotency** lives in unique constraints, not in application checks: job dedupe keys, event provider ids or body
   hashes, link create tokens, single-use OAuth states.
 - **Soft delete:** none. A disconnected connection keeps its row with status `DISABLED` until deleted; deleting a
-  connection deletes its credentials and refuses while an active sync definition uses it (`409`, the stance of
+  connection deletes its credentials and refuses while a sync definition or a workflow uses it (`409`, the stance of
   [wasichai ADR-017](https://github.com/wasichai/wasichai/blob/main/docs/adr/0017-metadata-deletion-refuses-instead-of-cascading.md)).
 - **Retention:** consumed or expired OAuth states purged after a day; succeeded jobs and processed events purged after
   a configured retention (default 30 days); runs kept 90 days; conflicts and links kept while the definition exists.

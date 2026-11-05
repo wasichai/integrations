@@ -45,6 +45,19 @@ writes round-trip, error responses map to the right `ConnectorError`.
 | `Reconciler` | full comparison, deletes and divergence |
 | `ConflictService` | list and resolve conflicts |
 
+## wasichai-integrations-workflows
+
+Integration workflows ([ADR-0022](../adr/0022-integration-workflows.md)): definitions, immutable versions and
+validation. Nothing executes yet ([#42](https://github.com/wasichai/integrations/issues/42)).
+
+| Component | Responsibility |
+|---|---|
+| `WorkflowGraph` | the graph model (trigger, steps, edges, operands) parsed from JSON with field-located violations |
+| `Condition` | the closed condition set (`equals`, `notEquals`, `exists`, `in`, `gt`, `lt`, `and`, `or`, `not`) |
+| `WorkflowValidator` | shape, edges, reachability, no cycles, references upstream, tenant connections, manifests, resource schemas |
+| `WorkflowService` / `WorkflowController` | drafts with optimistic locking, validate, publish to the next version, version reads |
+| `WorkflowRepository` | definitions, versions, the published trigger; `ConnectionUsage` for connections a workflow uses |
+
 ## Connectors
 
 - `integrations-connector-notion`: OAuth, data sources, page properties, webhooks (HMAC), rate limits.

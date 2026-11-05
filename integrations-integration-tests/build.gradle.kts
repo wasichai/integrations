@@ -15,6 +15,7 @@ dependencies {
     // the platform and two real connectors, each pointed at a stateful stub provider (no real account in ci)
     testImplementation(project(":wasichai-integrations"))
     testImplementation(project(":wasichai-integrations-sync"))
+    testImplementation(project(":wasichai-integrations-workflows"))
     testImplementation(project(":integrations-connector-notion"))
     testImplementation(project(":integrations-connector-salesforce"))
     testImplementation(project(":integrations-connector-sdk-test"))

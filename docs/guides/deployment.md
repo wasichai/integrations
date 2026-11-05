@@ -36,7 +36,8 @@ The token needs `read:packages`. What each artifact brings:
 |---|---|
 | `wasichai-spring-boot-starter-integrations` | the Wasichai starter plus `wasichai-integrations` (connections, OAuth, webhooks, events, jobs, health) |
 | `wasichai-spring-boot-starter-integrations-sync` | the above plus `wasichai-integrations-sync` (definitions, engine, scheduler, conflicts) |
-| `wasichai-integrations`, `wasichai-integrations-sync` | the modules alone, for an app that assembles Wasichai itself |
+| `wasichai-spring-boot-starter-integrations-workflows` | the integrations starter plus `wasichai-integrations-workflows` (definitions, versions, validation; nothing runs yet) |
+| `wasichai-integrations`, `wasichai-integrations-sync`, `wasichai-integrations-workflows` | the modules alone, for an app that assembles Wasichai itself |
 | `integrations-connector-notion`, `-salesforce`, `-jira`, `-github`, `-slack` | the shipped connectors (no Spring) |
 | `integrations-connector-openapi` | a connector for any REST API with an OpenAPI 3 document, configured in code (no Spring) |
 | `integrations-connector-sdk`, `integrations-connector-sdk-test` | for writing and testing connectors |
@@ -63,8 +64,8 @@ connector bean is validated at start-up; an invalid manifest or a duplicate id s
 
 The modules need what the Wasichai starter provides: PostgreSQL through R2DBC, Wasichai's JWT security and
 `CurrentUser`, `WasichaiSchemas`, and the cluster lock. Each module runs its own Flyway history: `integrations`
-(`db/wasichai/integrations`, after every Wasichai module) and `integrations_sync` (`db/wasichai/integrations-sync`), in
-the Wasichai metadata schema. Nothing has to be run by hand.
+(`db/wasichai/integrations`, after every Wasichai module), `integrations_sync` (`db/wasichai/integrations-sync`) and
+`integrations_workflows` (`db/wasichai/integrations-workflows`), in the Wasichai metadata schema. Nothing has to be run by hand.
 
 ## Properties
 
@@ -72,7 +73,7 @@ the Wasichai metadata schema. Nothing has to be run by hand.
 
 | Property | Default | Meaning |
 |---|---|---|
-| `enabled` | `true` | `false` turns the module (and the sync module with it) off; its routes answer `404` |
+| `enabled` | `true` | `false` turns the module (and the sync and workflows modules with it) off; its routes answer `404` |
 | `public-base-url` | none | how providers reach this app, e.g. `https://app.example.com`; needed for OAuth and webhooks |
 | `encryption.keys.<id>` | none | base64 of 32 random bytes (AES-256) per key id; **required** |
 | `encryption.active-key` | none | the key id new secrets are sealed with; **required**, must be one of `keys` |
@@ -101,6 +102,12 @@ OAuth providers usually require it.
 | `page-size` | `100` | records per change-feed or list page, 1–1000 |
 | `scheduler-enabled` | `true` | start scheduled and reconcile runs |
 | `scheduler-tick` | `30s` | how often the scheduler looks for due definitions; must be positive |
+
+### `wasichai.integrations.workflows.*`
+
+| Property | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | `false` turns the workflows module off; its routes answer `404` |
 
 A minimal `application.yml`:
 

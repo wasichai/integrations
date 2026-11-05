@@ -2,6 +2,22 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Workflow definitions and versions
+
+New module `wasichai-integrations-workflows` and starter `wasichai-spring-boot-starter-integrations-workflows`
+([#41](https://github.com/wasichai/integrations/issues/41), ADR-0022). A workflow is a JSON graph: one trigger
+(`event`, `webhook`, `schedule`, `manual`) and steps (`action` as a connector action or a record write, `condition`,
+`branch`, `parallel` with a join, `delay`, `approval`, `end`) with named edges and `onError`; conditions are a closed
+set (`equals`, `notEquals`, `exists`, `in`, `gt`, `lt`, `and`, `or`, `not`). Drafts save freely; `validate` reports
+field-located violations (one trigger, edges, reachability, no cycles, upstream references, the tenant's connections,
+manifest capabilities, actions, events and resources, input against the discovered schema); `publish` stores the
+draft as an immutable numbered version and derives its trigger row. Separate from `wasichai-workflow` and
+`wasichai-automation`; execution on the job queue is #42, so published workflows do not run yet. A connection a
+workflow uses is not deleted under it (`409`). Flyway history `integrations_workflows` (order 220). REST change
+(additive): `/api/integrations/workflows` (list, create, get, update, delete, validate, publish, versions). New tests:
+`ConditionTest`, `WorkflowValidatorTest`, `WasichaiIntegrationsWorkflowsAutoConfigurationTest`, `WorkflowApiTest`,
+`WorkflowsDisabledTest`; `AppBootsTest` reads the workflow routes beside sync's.
+
 ## 2026-11-05 — Token refusals inside a 200 answer
 
 The token client now reads a `2xx` token answer without `access_token` that carries an RFC 6749 `error` as a refused

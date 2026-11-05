@@ -9,5 +9,6 @@ How to use, extend and run Wasichai Integrations. The guides describe the code a
 | [Connector SDK reference](connector-sdk.md) | connector authors: contracts, manifest, maturity, errors, `ProviderHttp`, `ConnectorContext` |
 | [Writing a connector](connector-developer.md) | connector authors: step by step, testing with the contract kit, packaging, versioning |
 | [Synchronization](sync.md) | whoever designs sync definitions: mappings, transforms, owners, conflicts, creates, deletes, schedules |
+| [Workflows](workflows.md) | whoever designs integration workflows: graph JSON, steps, conditions, validation, versions |
 | [Deployment](deployment.md) | whoever installs it in an app: dependencies, every property, keys, OAuth, webhooks, scaling |
 | [Operations](operations.md) | whoever runs it: health, jobs, events, rate limits, metrics, diagnosis, logs |
