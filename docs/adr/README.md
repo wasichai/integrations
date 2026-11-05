@@ -20,3 +20,4 @@ supersedes it and says so in its status line.
 - [ADR-0013: Connector actions become MCP tools later, and only when explicitly exposed](0013-mcp-exposure-later-and-opt-in.md)
 - [ADR-0014: Salesforce changes are polled first; Pub/Sub Change Data Capture comes later](0014-salesforce-change-capture.md)
 - [ADR-0015: The sync engine's implementation refines links, runs, conflicts and reconciliation](0015-sync-implementation-decisions.md)
+- [ADR-0016: Jira finds its site on use, writes rich text as plain paragraphs, and claims webhooks only as implemented](0016-jira-cloud-connector.md)

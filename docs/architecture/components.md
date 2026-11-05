@@ -49,6 +49,10 @@ writes round-trip, error responses map to the right `ConnectorError`.
 
 - `integrations-connector-notion`: OAuth, data sources, page properties, webhooks (HMAC), rate limits.
 - `integrations-connector-salesforce`: OAuth + PKCE, describe, SOQL, CRUD, external-id upsert, incremental polling.
+- `integrations-connector-jira`: Jira Cloud by OAuth 2.0 (3LO, through the API gateway) or API token; projects and
+  issue fields (custom ones included), enhanced JQL search, incremental polling on `updated`, issue CRUD with rich text
+  as plain-text ADF, transitions and dynamic webhooks as actions, webhooks verified by HMAC or the app's JWT
+  ([ADR-0016](../adr/0016-jira-cloud-connector.md)).
 
 ## Frontend (wasichai/integrations-ui)
 
