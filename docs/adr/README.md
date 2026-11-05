@@ -31,3 +31,4 @@ supersedes it and says so in its status line.
 - [ADR-0022: Integration workflows are a module of their own: a versioned graph with closed conditions, run on the job queue](0022-integration-workflows.md)
 - [ADR-0023: A token answer without a token that names an error is a refused grant](0023-token-refusals-in-ok-responses.md)
 - [ADR-0024: Salesforce Change Data Capture is a bounded pull over the Pub/Sub API, in its own module](0024-salesforce-cdc-pub-sub.md)
+- [ADR-0025: Workflow runs are rows, steps are jobs, joins count arrivals under the run's lock](0025-workflow-execution.md)

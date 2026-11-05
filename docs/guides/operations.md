@@ -117,12 +117,15 @@ registry bean the module keeps them in a private `SimpleMeterRegistry`). Tags ne
 | `integrations.sync.records` | counter | `outcome` (`created`, `updated`, `skipped`, `failed`) | records per outcome |
 | `integrations.sync.conflicts` | counter | | conflicts opened |
 | `integrations.sync.reconcile` | counter | `finding` (`missing`, `diverged`, `cursor_reset`) | reconciliation findings |
+| `integrations.workflows.executions` | counter | `trigger` (`event`, `webhook`, `schedule`, `manual`), `outcome` (`started`, `succeeded`, `failed`, `cancelled`) | workflow runs started and ended |
+| `integrations.workflows.steps` | timer | `type` (step type), `outcome` (`succeeded`, `failed`, `retry`) | every step attempt that did work |
 
 `kind` on `integrations.sync.runs` is one of `manual`, `schedule`, `event`, `initial`, `reconcile`.
 
 Useful alerts: `integrations.jobs{outcome="dead"}` increasing; `integrations.sync.runs{outcome="failed"}` increasing;
 `integrations.http.requests{status="4xx"}` (401/403/429 land there) or `io_error` rising for one connector;
-`integrations.sync.conflicts` rising after a change of mappings.
+`integrations.sync.conflicts` rising after a change of mappings; `integrations.workflows.executions{outcome="failed"}`
+increasing.
 
 ## Diagnosing failures
 
@@ -176,7 +179,10 @@ names, never secrets, tokens, credentials or record contents:
 | warn | `sync {definition} side {side} checkpoint refused (...); reading from the start` |
 | warn | `sync {definition} link {link} ...; marked ORPHANED` |
 | info | `sync {definition} link {link} recovered: ...`, `sync {definition} reconcile: record {id} of {side} is gone` |
-| warn / error | `job drain failed`, `sync scheduler tick failed`; `job worker stopped`, `sync scheduler stopped` |
+| info | `workflow {definition} run {id} started by {trigger} [{correlationId}]`, `... run {id} {outcome} [...]` |
+| info / warn | `workflow run {id} step '{step}' attempt {n} failed ({errorKind}); retried`, `... step '{step}' failed ({errorKind})` |
+| warn | `workflow {definition} schedule failed to fire: {message}` |
+| warn / error | `job drain failed`, `sync scheduler tick failed`, `workflow scheduler tick failed`; `job worker stopped`, `sync scheduler stopped`, `workflow scheduler stopped` |
 
 Job and run errors (`lastError`, `error`) hold the exception class and message as the connector wrote it; connectors must
 keep secrets and record contents out of their messages ([connector SDK](connector-sdk.md#connectorexception-taxonomy)).

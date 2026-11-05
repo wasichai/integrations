@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import wasichai.core.platform.ModuleMigration
 import wasichai.integrations.ConnectionUsage
+import wasichai.integrations.IntegrationEventListener
+import wasichai.integrations.JobHandler
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import wasichai.integrations.workflows.autoconfigure.WasichaiIntegrationsWorkflowsAutoConfiguration
 import wasichai.test.WasichaiContextRunner
@@ -28,6 +30,12 @@ class WasichaiIntegrationsWorkflowsAutoConfigurationTest {
             assertThat(context).hasSingleBean(WorkflowController::class.java)
             assertThat(context).hasSingleBean(WorkflowValidator::class.java)
             assertThat(context.getBeansOfType(ConnectionUsage::class.java)).containsKey("workflowConnectionUsage")
+            // the engine runs as a job kind, the event trigger listens to events, the scheduler is a lifecycle
+            assertThat(context.getBeansOfType(JobHandler::class.java)).containsKey("workflowEngine")
+            assertThat(context.getBean(WorkflowEngine::class.java).kind).isEqualTo("integrations.workflow.step")
+            assertThat(context.getBeansOfType(IntegrationEventListener::class.java)).containsKey("workflowEventTrigger")
+            assertThat(context).hasSingleBean(WorkflowScheduler::class.java)
+            assertThat(context).hasSingleBean(WorkflowWebhookController::class.java)
         }
     }
 
@@ -37,6 +45,8 @@ class WasichaiIntegrationsWorkflowsAutoConfigurationTest {
             assertThat(context).hasNotFailed()
             assertThat(context).doesNotHaveBean(WorkflowController::class.java)
             assertThat(context).doesNotHaveBean(WorkflowService::class.java)
+            assertThat(context).doesNotHaveBean(WorkflowEngine::class.java)
+            assertThat(context).doesNotHaveBean(WorkflowScheduler::class.java)
             assertThat(context).doesNotHaveBean("wasichaiIntegrationsWorkflowsMigration")
         }
     }

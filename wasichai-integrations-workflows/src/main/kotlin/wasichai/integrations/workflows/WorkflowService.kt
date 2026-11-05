@@ -14,7 +14,7 @@ import java.time.Clock
 import java.util.UUID
 
 // a draft is saved as it is (an editor saves half-built graphs); it must validate to be published, and what is
-// published is an immutable, numbered version. nothing runs yet (#42)
+// published is an immutable, numbered version. running it is WorkflowRunService and WorkflowEngine (#42)
 class WorkflowService(
     private val access: IntegrationsAccess,
     private val repository: WorkflowRepository,
@@ -121,6 +121,6 @@ class WorkflowService(
         const val MAX_GRAPH_BYTES = 256 * 1024
 
         fun view(d: WorkflowDefinition) =
-            WorkflowView(d.id, d.name, d.status, d.graph, d.publishedVersion, !d.draftPublished, d.version, d.createdAt, d.updatedAt)
+            WorkflowView(d.id, d.name, d.status, d.graph, d.publishedVersion, !d.draftPublished, d.paused, d.version, d.createdAt, d.updatedAt)
     }
 }

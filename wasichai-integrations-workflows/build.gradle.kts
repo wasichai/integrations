@@ -4,7 +4,7 @@ plugins {
     id("wasichai.integration-test")
 }
 
-description = "Wasichai integrations workflows: definitions, immutable versions and validation of integration workflows"
+description = "Wasichai integrations workflows: definitions, immutable versions, validation and durable execution of integration workflows"
 
 dependencies {
     api(project(":wasichai-integrations"))

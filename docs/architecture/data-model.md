@@ -32,9 +32,11 @@ Flyway history and carry `organization_id uuid not null` with an index leading o
 
 | Table | Key columns | Constraints and notes |
 |---|---|---|
-| `integration_workflow_definitions` | id, org, name, status (DRAFT, PUBLISHED), graph jsonb (the draft), published_version, version, created_by | PUBLISHED exactly when published_version is set |
+| `integration_workflow_definitions` | id, org, name, status (DRAFT, PUBLISHED), graph jsonb (the draft), published_version, version, created_by, paused, webhook_token_hash | PUBLISHED exactly when published_version is set; paused starts no run; only the SHA-256 of the webhook secret |
 | `integration_workflow_versions` | definition_id FK, org, number, graph jsonb, published_at, published_by | PK (definition_id, number); an update trigger refuses any change but clearing published_by |
-| `integration_workflow_triggers` | definition_id PK/FK, org, version_number, type (EVENT, WEBHOOK, SCHEDULE, MANUAL), connection_id, event_type, config jsonb | the published version's trigger, replaced on publish; FK (definition_id, version_number) to versions; index (connection_id, event_type) for events |
+| `integration_workflow_triggers` | definition_id PK/FK, org, version_number, type (EVENT, WEBHOOK, SCHEDULE, MANUAL), connection_id, event_type, config jsonb, last_fired_at | the published version's trigger, replaced on publish (last_fired_at kept); FK (definition_id, version_number) to versions; index (connection_id, event_type) for events |
+| `integration_workflow_executions` | id, org, definition_id, version_number, status (QUEUED, RUNNING, WAITING, SUCCEEDED, FAILED, CANCELLED), trigger_type, trigger_key, trigger_payload jsonb, correlation_id, started_by, error, created/started/finished_at | FK (definition_id, version_number) to versions, cascade with the workflow; unique (definition_id, trigger_key) where set: one run per event, schedule firing or webhook key; index (org, definition_id, created_at desc, id desc) |
+| `integration_workflow_step_executions` | execution_id FK, org, step_id, step_type, status (PENDING, RUNNING, WAITING, SUCCEEDED, FAILED, SKIPPED), attempt, input/output jsonb, error, idempotency_key, scope jsonb, arrivals int[], wait_until, decided_by | PK (execution_id, step_id): no loops, a step runs at most once per run; a join's arrivals are counted in its row (ADR-0025) |
 
 
 - **Optimistic locking** on rows people edit (`provider_configs`, `connections`, `sync_definitions`, `record_links`,

@@ -21,7 +21,7 @@ class WorkflowRepository(
 
     // jsonb equality is semantic: key order and whitespace do not count as a change
     private val columns =
-        "d.id, d.organization_id, d.name, d.status, d.graph::text AS graph, d.published_version, d.version, d.created_at, d.updated_at, " +
+        "d.id, d.organization_id, d.name, d.status, d.graph::text AS graph, d.published_version, d.paused, d.version, d.created_at, d.updated_at, " +
             "EXISTS (SELECT 1 FROM $m.integration_workflow_versions v WHERE v.definition_id = d.id AND v.number = d.published_version " +
             "AND v.graph = d.graph) AS draft_published"
 
@@ -222,6 +222,40 @@ class WorkflowRepository(
             }.one()
             .awaitFirstOrNull()
 
+    // pausing is not a draft change: the version (ETag) stays
+    suspend fun setPaused(
+        organizationId: UUID,
+        id: UUID,
+        paused: Boolean,
+        now: Instant
+    ): Boolean =
+        db
+            .sql("UPDATE $m.integration_workflow_definitions SET paused = :paused, updated_at = :now WHERE organization_id = :org AND id = :id")
+            .bind("paused", paused)
+            .bind("now", now.odt())
+            .bind("org", organizationId)
+            .bind("id", id)
+            .fetch()
+            .rowsUpdated()
+            .awaitSingle() == 1L
+
+    // only the hash is kept: the url's secret is shown once, when issued
+    suspend fun setWebhookToken(
+        organizationId: UUID,
+        id: UUID,
+        hash: String,
+        now: Instant
+    ): Boolean =
+        db
+            .sql("UPDATE $m.integration_workflow_definitions SET webhook_token_hash = :hash, updated_at = :now WHERE organization_id = :org AND id = :id")
+            .bind("hash", hash)
+            .bind("now", now.odt())
+            .bind("org", organizationId)
+            .bind("id", id)
+            .fetch()
+            .rowsUpdated()
+            .awaitSingle() == 1L
+
     // names of the workflows whose draft or published version uses this connection (ConnectionUsage).
     // the path is a constant; the connection id is a bound jsonpath variable
     suspend fun namesOnConnection(
@@ -250,6 +284,7 @@ class WorkflowRepository(
             graph = json.readTree(row.get("graph", String::class.java)!!),
             publishedVersion = row.get("published_version", Int::class.javaObjectType),
             draftPublished = row.get("draft_published", Boolean::class.javaObjectType) ?: false,
+            paused = row.get("paused", Boolean::class.javaObjectType) ?: false,
             version = row.get("version", Int::class.javaObjectType)!!,
             createdAt = row.get("created_at", OffsetDateTime::class.java)!!.toInstant(),
             updatedAt = row.get("updated_at", OffsetDateTime::class.java)!!.toInstant()

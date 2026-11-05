@@ -102,6 +102,17 @@ class WorkflowValidator(
                 p.branches.forEachIndexed { i, b ->
                     if (p.join !in reach(b, out)) v += FieldViolation("${p.path}.join", "not reached from branches[$i] '$b'")
                 }
+                // a step runs at most once per run (ADR-0025): two branches may meet only at the join. a step that
+                // leads away from it (a shared error path to an end) may be shared: the join never waits for it
+                val owners = mutableMapOf<String, Int>()
+                p.branches.forEachIndexed { i, b ->
+                    (reach(b, out, stop = p.join) - p.join).filter { p.join in reach(it, out) }.forEach { id ->
+                        val first = owners.putIfAbsent(id, i)
+                        if (first != null && first != i) {
+                            v += FieldViolation(graph.step(id)!!.path, "in branches[$first] and branches[$i] of '${p.id}': branches meet only at the join")
+                        }
+                    }
+                }
             }
             // a step reads only what ran before it: the trigger, or a step upstream of it that has an output
             val upstream = ancestors(graph, out)
@@ -120,13 +131,14 @@ class WorkflowValidator(
 
         private fun reach(
             from: String,
-            out: Map<String, List<String>>
+            out: Map<String, List<String>>,
+            stop: String? = null
         ): Set<String> {
             val seen = mutableSetOf<String>()
             val stack = ArrayDeque(listOf(from))
             while (stack.isNotEmpty()) {
                 val id = stack.removeLast()
-                if (seen.add(id)) out[id].orEmpty().forEach(stack::addLast)
+                if (seen.add(id) && id != stop) out[id].orEmpty().forEach(stack::addLast)
             }
             return seen
         }

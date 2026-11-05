@@ -45,7 +45,7 @@ Logical boundaries inside the same deployable:
 | Schema discovery | Connector runtime (`ProviderHttp`, rate limits, retries) |
 | Sync definitions and mappings | Sync engine (diff, ownership, conflicts, writes) |
 | Conflict resolution, health API | Reconciliation, retry and recovery |
-| Workflow definitions, versions, validation | Workflow runs on the job queue (not yet: #42) |
+| Workflow definitions, versions, validation, approvals | Workflow runs on the job queue, triggers, schedules |
 
 The control plane is request/response under a user's JWT. The data plane runs as the platform per tenant
 (`RecordService.asPlatform` semantics,
@@ -59,9 +59,10 @@ driven by jobs claimed with `FOR UPDATE SKIP LOCKED` ([ADR-0008](../adr/0008-dur
   incremental read → sync engine.
 - **Polling:** schedule (cluster-locked) → job → `ResourceReader.read(since = cursor)` → sync engine → cursor saved.
 - **Write:** sync engine → connector `ResourceWriter` through `ProviderHttp` → link and snapshot persisted.
-- **Workflow:** editor → draft graph → `validate` → `publish` → immutable version and its trigger row. Published
-  workflows do not run yet: execution on the job queue is [#42](https://github.com/wasichai/integrations/issues/42)
-  ([ADR-0022](../adr/0022-integration-workflows.md)).
+- **Workflow:** editor → draft graph → `validate` → `publish` → immutable version and its trigger row
+  ([ADR-0022](../adr/0022-integration-workflows.md)). Event, schedule (cluster-locked), webhook or manual trigger →
+  run row pinned to the version → one job per step (`integrations.workflow.step`) → connector actions and writes
+  through the SDK → next steps in the same transaction ([ADR-0025](../adr/0025-workflow-execution.md)).
 
 ## Where to read next
 

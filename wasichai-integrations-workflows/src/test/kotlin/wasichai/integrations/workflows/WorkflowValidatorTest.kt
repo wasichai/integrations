@@ -146,6 +146,29 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    fun `parallel branches meet only at their join, though they may share a path away from it`() {
+        fun fan(
+            bNext: String,
+            aOnError: String? = null,
+            bOnError: String? = null
+        ) = graph(
+            trigger = mapOf("type" to "manual", "next" to "fan"),
+            steps =
+                listOf(
+                    mapOf("id" to "fan", "type" to "parallel", "branches" to listOf("a", "b"), "join" to "join"),
+                    mapOf("id" to "a", "type" to "delay", "duration" to "PT5M", "next" to "shared", "onError" to aOnError),
+                    mapOf("id" to "b", "type" to "delay", "duration" to "PT5M", "next" to bNext, "onError" to bOnError),
+                    mapOf("id" to "shared", "type" to "delay", "duration" to "PT5M", "next" to "join"),
+                    mapOf("id" to "join", "type" to "end"),
+                    mapOf("id" to "failed", "type" to "end")
+                ).filter { it["id"] != "failed" || aOnError != null }
+        )
+        assertEquals(emptyList<FieldViolation>(), violations(fan(bNext = "join")))
+        assertEquals(setOf("graph.steps[3]"), fields(fan(bNext = "shared")))
+        assertEquals(emptyList<FieldViolation>(), violations(fan(bNext = "join", aOnError = "failed", bOnError = "failed")))
+    }
+
+    @Test
     fun `delays and approvals take bounded durations and a title`() {
         fun one(step: Map<String, Any?>) =
             graph(

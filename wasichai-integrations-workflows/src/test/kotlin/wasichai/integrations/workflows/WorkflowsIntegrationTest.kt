@@ -14,7 +14,11 @@ import java.util.UUID
         "wasichai.integrations.encryption.keys.it1=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
         "wasichai.integrations.encryption.active-key=it1",
         // nothing runs in the background of these tests
-        "wasichai.integrations.jobs.worker-enabled=false"
+        "wasichai.integrations.jobs.worker-enabled=false",
+        "wasichai.integrations.workflows.scheduler-enabled=false",
+        // a retried step is due again at once: tests drain the queue themselves
+        "wasichai.integrations.jobs.backoff=PT0.001S",
+        "wasichai.integrations.jobs.max-backoff=PT0.001S"
     ]
 )
 abstract class WorkflowsIntegrationTest : WasichaiIntegrationTest()

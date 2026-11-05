@@ -13,4 +13,10 @@ class WorkflowsTestApplication {
 
     @Bean
     fun memM(): MemMessenger = MemMessenger("mem-m")
+
+    @Bean
+    fun memU(): MemUpserter = MemUpserter("mem-u")
+
+    @Bean
+    fun memN(): MemMessenger = MemMessenger("mem-n")
 }
