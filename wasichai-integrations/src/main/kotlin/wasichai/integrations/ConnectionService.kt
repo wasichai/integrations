@@ -292,20 +292,8 @@ class ConnectionService(
         val connection = find(user.organizationId, id)
         val users = usages.flatMap { it.usedBy(user.organizationId, id) }
         if (users.isNotEmpty()) throw ConflictException("Connection $id is still used by ${users.joinToString(", ")}; delete those first")
-        val method =
-            registry
-                .find(connection.connectorId)
-                ?.manifest
-                ?.authMethods
-                ?.filterIsInstance<AuthMethod.OAuth2AuthorizationCode>()
-                ?.firstOrNull()
-        if (connection.authType == AuthType.OAUTH2_AUTHORIZATION_CODE && method?.revokeUrl != null) {
-            runCatching {
-                val stored = connections.credentials(user.organizationId, id)
-                val token = stored?.secrets?.refreshToken ?: stored?.secrets?.accessToken
-                if (token != null) tokens.revoke(method.revokeUrl!!, credentials.client(connection), token)
-            }.onFailure { log.warn("integrations: revoke for connection {} failed ({}), deleting anyway", id, it.javaClass.simpleName) }
-        }
+        val stored = runCatching { connections.credentials(user.organizationId, id) }.getOrNull()
+        credentials.revoke(connection, stored)
         if (!connections.delete(user.organizationId, id)) throw NotFoundException("Connection $id not found")
     }
 

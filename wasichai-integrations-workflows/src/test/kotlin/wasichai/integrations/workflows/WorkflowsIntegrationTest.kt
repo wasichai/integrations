@@ -18,7 +18,9 @@ import java.util.UUID
         "wasichai.integrations.workflows.scheduler-enabled=false",
         // a retried step is due again at once: tests drain the queue themselves
         "wasichai.integrations.jobs.backoff=PT0.001S",
-        "wasichai.integrations.jobs.max-backoff=PT0.001S"
+        "wasichai.integrations.jobs.max-backoff=PT0.001S",
+        // tests call the purge themselves
+        "wasichai.integrations.retention.enabled=false"
     ]
 )
 abstract class WorkflowsIntegrationTest : WasichaiIntegrationTest()

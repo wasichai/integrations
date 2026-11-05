@@ -16,7 +16,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/integrations")
 class ConnectionController(
-    private val connections: ConnectionService
+    private val connections: ConnectionService,
+    private val data: ConnectionDataService
 ) {
     @GetMapping("/connections")
     suspend fun list(): List<ConnectionView> = connections.list()
@@ -37,6 +38,26 @@ class ConnectionController(
     suspend fun delete(
         @PathVariable id: UUID
     ) = connections.delete(id)
+
+    // GDPR (ADR-0029): everything stored for the connection, paged per section; no secret, only "set" flags
+    @GetMapping("/connections/{id}/export")
+    suspend fun export(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) page: Int?,
+        @RequestParam(required = false) size: Int?
+    ): ConnectionExport = data.export(id, page, size)
+
+    // the connection and all its derived data across modules, even while used; a plain DELETE still answers 409 then
+    @PostMapping("/connections/{id}/erase")
+    suspend fun erase(
+        @PathVariable id: UUID
+    ): ErasureView = data.erase(id)
+
+    @PostMapping("/connections/{id}/erase-record")
+    suspend fun eraseRecord(
+        @PathVariable id: UUID,
+        @RequestBody request: EraseRecordRequest
+    ): ErasureView = data.eraseRecord(id, request)
 
     @PostMapping("/connections/{id}/test")
     suspend fun test(

@@ -167,4 +167,25 @@ class ConnectionCredentials(
     companion object {
         const val UNREADABLE = "credentials cannot be decrypted with the configured keys; reconnect"
     }
+
+    // revokes an oauth authorization at the provider when the connector declares a revoke url. best effort: the
+    // connection goes anyway. stored is read by the caller before the credentials row is deleted
+    suspend fun revoke(
+        connection: Connection,
+        stored: StoredCredentials?
+    ): Boolean {
+        val method =
+            registry
+                .find(connection.connectorId)
+                ?.manifest
+                ?.authMethods
+                ?.filterIsInstance<AuthMethod.OAuth2AuthorizationCode>()
+                ?.firstOrNull()
+        val url = method?.revokeUrl
+        if (connection.authType != AuthType.OAUTH2_AUTHORIZATION_CODE || url == null) return false
+        val token = stored?.secrets?.refreshToken ?: stored?.secrets?.accessToken ?: return false
+        return runCatching { tokens.revoke(url, client(connection), token) }
+            .onFailure { log.warn("integrations: revoke for connection {} failed ({})", connection.id, it.javaClass.simpleName) }
+            .isSuccess
+    }
 }

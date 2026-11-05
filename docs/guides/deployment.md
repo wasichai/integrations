@@ -128,6 +128,15 @@ the Wasichai metadata schema. Nothing has to be run by hand.
 | `jobs.backoff` | `30s` | first retry delay, doubled per attempt |
 | `jobs.max-backoff` | `1h` | ceiling of the retry delay |
 | `webhooks.max-body-bytes` | `1048576` (1 MiB) | a larger delivery is refused with `413` before parsing |
+| `retention.enabled` | `true` | run the retention purge on this replica (cluster-locked: one replica purges per tick) |
+| `retention.interval` | `1h` | how often the purge runs; must be positive |
+| `retention.initial-delay` | `5m` | the first purge after start |
+| `retention.batch-size` | `1000` | rows per `DELETE`, 1–100000: short statements, short locks |
+| `retention.max-batches` | `100` | batches per task and tick; what is left waits for the next tick |
+| `retention.max-age.<task>` | per task | how long finished rows are kept, by task: `events` (30d), `jobs` (30d), `usage` (400d), `sync.runs` (90d), `sync.conflicts` (180d), `workflows.executions` (90d), `ai.executions` (180d); `0` keeps forever |
+| `usage.flush-interval` | `30s` | how often usage counters are written; a crash loses at most this much counting |
+| `export.page-size` | `200` | rows per section in one page of a connection's GDPR export |
+| `export.max-page-size` | `1000` | the largest `size` a caller may ask for |
 
 `public-base-url` must start with `http://` or `https://` when set. Use `https` in production: providers call it and
 OAuth providers usually require it.
@@ -158,6 +167,11 @@ OAuth providers usually require it.
 | `mcp.enabled` | `true` | `false` removes the MCP endpoint `POST /api/integrations/mcp` (`404`); the REST tool routes stay |
 | `mcp.allowed-origins` | empty | browser origins that may call the MCP endpoint; any other `Origin` is `403`. Empty: no browser page may |
 | `mcp.page-size` | `100` | tools per `tools/list` page, 1–1000 |
+
+Retention ages take Spring durations (`30d`, `12h`). The task names hold dots: in YAML write
+`max-age: {"[sync.runs]": 30d}` or nest them (`max-age: {sync: {runs: 30d}}`); as environment variables
+`WASICHAI_INTEGRATIONS_RETENTION_MAXAGE_SYNC_RUNS=30d`. What each task deletes and never deletes is in the
+[operations guide](operations.md#retention) and [ADR-0029](../adr/0029-retention-gdpr-usage.md).
 
 An origin in `mcp.allowed-origins` (`https://agent.example.com`) must pass `wasichai.web.cors-allowed-origin-patterns`
 too; MCP clients outside a browser send no `Origin`.
@@ -270,6 +284,9 @@ All replicas share the PostgreSQL job queue (`integration_jobs`):
 - The workflow scheduler likewise: one replica per tick (cluster lock), and a firing is claimed once in the database,
   so a schedule never fires twice. Workflow steps are jobs like any other: a step running when its replica dies runs
   again after `jobs.lease`; finished steps are never repeated ([ADR-0025](../adr/0025-workflow-execution.md)).
+- The retention purge may run on every replica too: one replica purges per tick (cluster lock
+  `integrations.retention`). Each replica buffers its usage counts in memory and adds them to the table every
+  `usage.flush-interval` and on a graceful shutdown; a killed replica loses what it had not written yet.
 - Rate limits are kept in memory per replica: n replicas may together reach n times a connector's declared rate. A
   provider's `429` still slows every replica through retries.
 - Provider calls are made with the app's own HTTP client; outbound access to the providers' hosts (and DNS) must be
@@ -416,3 +433,4 @@ runs the HTTP checks against an app already running with the seed, e.g. the jar 
 - [ ] At least one replica runs the job worker; `jobs.lease` fits the longest sync run.
 - [ ] With the example image: `WASICHAI_SEED_DEV` off, secrets out of the repository, `api` and `worker` roles set,
       a grace period of at least 40 s.
+- [ ] Retention ages (`retention.max-age.*`) match the data protection policy; the defaults keep events and jobs 30 days.

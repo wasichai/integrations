@@ -17,6 +17,7 @@ import wasichai.integrations.JobRepository
 import wasichai.integrations.JobRunner
 import wasichai.integrations.PermanentJobFailure
 import wasichai.integrations.Transactions
+import wasichai.integrations.UsageMeter
 import wasichai.integrations.sdk.ActionExecutor
 import wasichai.integrations.sdk.ConnectorException
 import wasichai.integrations.sdk.FieldValue
@@ -43,7 +44,8 @@ class WorkflowEngine(
     private val tx: Transactions,
     private val meters: IntegrationsMeters,
     private val properties: WorkflowsProperties,
-    private val clock: Clock
+    private val clock: Clock,
+    private val usage: UsageMeter? = null
 ) : JobHandler {
     private val log = LoggerFactory.getLogger(javaClass)
     private val nodes = JsonNodeFactory.instance
@@ -154,10 +156,13 @@ class WorkflowEngine(
                 }
                 log.warn("integrations: workflow run {} step '{}' failed ({}) [{}]", executionId, stepId, kind, execution.correlationId)
                 timer(step, "failed", started)
+                usage?.record(execution.organizationId, STEPS_RUN)
                 fail(execution, graph, step, row.scope, message)
                 return
             }
         timer(step, "succeeded", started)
+        // a step that ran to an outcome; its retries are not steps of their own
+        usage?.record(execution.organizationId, STEPS_RUN)
         commit(execution, graph, stepId, StepStatus.SUCCEEDED, outcome.output, null, outcome.moves, outcome.end)
     }
 
@@ -472,6 +477,9 @@ class WorkflowEngine(
         const val SOURCE = "integrations.workflow"
         const val EXECUTIONS = "integrations.workflows.executions"
         const val STEPS = "integrations.workflows.steps"
+
+        // usage metric: steps that ran to success or failure
+        const val STEPS_RUN = "workflow.steps"
 
         fun dedupeKey(
             executionId: UUID,

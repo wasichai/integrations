@@ -66,8 +66,15 @@ never from free user input; there is no host allowlist for `instance_url` beyond
 
 ## Retention and data protection
 
-Event payloads and snapshots contain provider data. There is no retention setting and no purge of events, runs or
-snapshots yet ([#46](https://github.com/wasichai/integrations/issues/46)); only expired OAuth states are purged.
-Deleting a connection deletes its credentials, webhook endpoints and events (foreign keys cascade); deleting an
-organization cascades to every integrations table of that tenant. Export for GDPR requests is out of the MVP and
-planned for Phase 8.
+Event payloads, snapshots, workflow step inputs and outputs and tool executions contain provider data. Since
+[#46](https://github.com/wasichai/integrations/issues/46) ([ADR-0029](../adr/0029-retention-gdpr-usage.md)) a
+cluster-locked purge deletes finished history after a configured age per task (events and jobs 30 days, sync runs and
+workflow runs 90, resolved conflicts and tool executions 180, usage counters 400); expired OAuth states are purged as
+before. Deleting a connection deletes its credentials, webhook endpoints and events (foreign keys cascade) and is
+refused while something uses it; deleting an organization cascades to every integrations table of that tenant.
+
+GDPR requests are served per connection by a tenant administrator (`MANAGE_ORGANIZATION`): an export of every row
+stored for it (paged; credentials and webhook secrets appear only as "set" flags, never as values or ciphertext), an
+erasure of the connection with everything derived from it across modules (one transaction, token revoked, audited),
+and an erasure of one provider record (events deleted, its side of sync links forgotten, finished runs and executions
+carrying its id deleted, audited without the id). Wasichai's own `audit_log` follows Wasichai's retention.

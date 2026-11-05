@@ -15,7 +15,9 @@ import wasichai.test.WasichaiIntegrationTest
         // job tests drive the runner themselves: no loop racing them
         "wasichai.integrations.jobs.worker-enabled=false",
         "wasichai.integrations.jobs.backoff=1ms",
-        "wasichai.integrations.jobs.max-backoff=1ms"
+        "wasichai.integrations.jobs.max-backoff=1ms",
+        // tests call the purge themselves
+        "wasichai.integrations.retention.enabled=false"
     ]
 )
 abstract class IntegrationsIntegrationTest : WasichaiIntegrationTest()

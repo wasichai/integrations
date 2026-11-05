@@ -17,6 +17,7 @@ import wasichai.integrations.JobRepository
 import wasichai.integrations.JobRunner
 import wasichai.integrations.PermanentJobFailure
 import wasichai.integrations.Transactions
+import wasichai.integrations.UsageMeter
 import wasichai.integrations.sdk.Change
 import wasichai.integrations.sdk.ChangeFeed
 import wasichai.integrations.sdk.ConnectorContext
@@ -45,7 +46,8 @@ class SyncEngine(
     private val tx: Transactions,
     private val meters: IntegrationsMeters,
     private val properties: SyncProperties,
-    private val clock: Clock
+    private val clock: Clock,
+    private val usage: UsageMeter? = null
 ) : JobHandler,
     IntegrationEventListener {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -109,6 +111,8 @@ class SyncEngine(
             throw e
         } finally {
             record(counts, trigger, outcome)
+            // records written to a provider, a failed run's partial writes too: they happened
+            usage?.record(organizationId, RECORDS_SYNCED, (counts.created + counts.updated).toLong())
         }
     }
 
@@ -714,5 +718,8 @@ class SyncEngine(
 
     companion object {
         const val KIND = "integrations.sync.run"
+
+        // usage metric: records a run created, updated or deleted at a provider
+        const val RECORDS_SYNCED = "sync.records"
     }
 }

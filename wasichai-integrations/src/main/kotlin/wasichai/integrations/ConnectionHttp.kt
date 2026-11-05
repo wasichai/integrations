@@ -18,7 +18,8 @@ class ConnectionHttp(
     private val http: PlatformHttp,
     private val limits: RateLimits,
     private val hint: RateLimitHint?,
-    private val meters: MeterRegistry
+    private val meters: MeterRegistry,
+    private val usage: UsageMeter?
 ) : ProviderHttp {
     override suspend fun exchange(request: ProviderRequest): ProviderResponse {
         val headers = credentials.headers(connection)
@@ -42,6 +43,8 @@ class ConnectionHttp(
         val key = connection.id.toString()
         limits.acquire(key, hint)
         val started = System.nanoTime()
+        // every exchange the provider sees counts, a failed one and a retry after a refresh too
+        usage?.record(connection.organizationId, UsageMeter.PROVIDER_CALLS)
         val response =
             try {
                 http.send(request)
@@ -89,13 +92,14 @@ class ConnectorContexts(
     private val registry: ConnectorRegistry,
     private val limits: RateLimits,
     private val meters: MeterRegistry,
-    private val clock: Clock
+    private val clock: Clock,
+    private val usage: UsageMeter? = null
 ) {
     fun forConnection(connection: Connection): ConnectorContext {
         val hint = registry.find(connection.connectorId)?.manifest?.rateLimit
         return PlatformConnectorContext(
             connection.id.toString(),
-            ConnectionHttp(connection, credentials, http, limits, hint, meters),
+            ConnectionHttp(connection, credentials, http, limits, hint, meters, usage),
             connection.metadata,
             clock
         )

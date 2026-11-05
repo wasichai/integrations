@@ -15,6 +15,7 @@ Flyway history and carry `organization_id uuid not null` with an index leading o
 | `integration_jobs` | id, org, kind, dedupe_key, payload, status, attempts, max_attempts, next_attempt_at, lease_until, last_error, correlation_id, created_at, finished_at | UNIQUE (org, kind, dedupe_key) for live jobs; partial index on (status, next_attempt_at) where PENDING |
 | `webhook_endpoints` | id (random, unguessable), org, connection_id FK, secret ciphertext/nonce/key_id, status, created_at | id is the path segment |
 | `integration_events` | id, org, connection_id FK, connector_id, provider_event_id, body_hash, resource_type, resource_id, event_type, occurred_at null, received_at, source, correlation_id, causation_id, schema_version, payload, metadata, status | UNIQUE (connection_id, provider_event_id) and UNIQUE (connection_id, body_hash) when no provider id |
+| `integration_usage_daily` | org, day (UTC date), metric, count bigint, updated_at | PK (org, day, metric); metric `^[a-z][a-z0-9._]{0,63}$`; written as upsert increments by the usage meter's flush (ADR-0029) |
 
 ## wasichai-integrations-sync (`db/wasichai/integrations-sync`)
 
@@ -56,7 +57,16 @@ Flyway history and carry `organization_id uuid not null` with an index leading o
   hashes, link create tokens, single-use OAuth states.
 - **Soft delete:** none. A disconnected connection keeps its row with status `DISABLED` until deleted; deleting a
   connection deletes its credentials and refuses while a sync definition, a workflow or an AI tool uses it (`409`, the stance of
-  [wasichai ADR-017](https://github.com/wasichai/wasichai/blob/main/docs/adr/0017-metadata-deletion-refuses-instead-of-cascading.md)).
-- **Retention:** consumed or expired OAuth states purged after a day; succeeded jobs and processed events purged after
-  a configured retention (default 30 days); runs kept 90 days; conflicts and links kept while the definition exists.
+  [wasichai ADR-017](https://github.com/wasichai/wasichai/blob/main/docs/adr/0017-metadata-deletion-refuses-instead-of-cascading.md));
+  the explicit, audited erasure is the only cascade across modules.
+- **Retention** ([ADR-0029](../adr/0029-retention-gdpr-usage.md)): expired OAuth states are purged when a new
+  authorization starts; a cluster-locked purge deletes, in batches, events that are not `RECEIVED` and `SUCCEEDED`/`DEAD`
+  jobs after 30 days, finished sync runs after 90 (the latest per definition and trigger, and the latest successful,
+  stay), resolved conflicts after 180, finished workflow runs after 90, finished AI tool executions after 180 and usage
+  rows after 400 (`wasichai.integrations.retention.max-age.<task>`). Open conflicts, links and snapshots stay while
+  their definition exists; nothing running, waiting or pending is purged. Indexes on the purge columns
+  (`received_at`, `finished_at`, `resolved_at`) are partial on the purgeable statuses.
+- **Erasure** (ADR-0029): `POST /connections/{id}/erase` deletes a connection with every row derived from it in every
+  module in one transaction; `erase-record` forgets one provider record (events deleted, its side of sync links
+  cleared and the link `ORPHANED`, finished runs and executions carrying the id deleted).
 - **Secrets** never appear outside `*_ciphertext` columns; there is no plaintext column to read by mistake.

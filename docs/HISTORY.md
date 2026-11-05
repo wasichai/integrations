@@ -2,6 +2,30 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Retention, GDPR export and erasure, usage metering
+
+Phase 8 operations across every module ([#46](https://github.com/wasichai/integrations/issues/46), ADR-0029). Three core
+SPIs, filled by each module for its own tables: `RetentionTask`, `ExportContributor`, `ErasureContributor`; plus a core
+`UsageMeter` the modules call. **Retention**: one cluster-locked `RetentionScheduler` (`integrations.retention`, every
+`wasichai.integrations.retention.interval`, 1 h) runs every task in `DELETE … LIMIT` batches (sub-select with `SKIP
+LOCKED`); ages by task name under `retention.max-age.*` (`events`, `jobs` 30d, `usage` 400d, `sync.runs` 90d,
+`sync.conflicts` 180d, `workflows.executions` 90d, `ai.executions` 180d; `0` keeps forever). Unprocessed events,
+pending or running jobs, open conflicts, links, running or waiting runs and pending approvals are never purged; the
+latest sync run per definition and trigger stays. Meters `integrations.retention.purged{task,table}` and
+`integrations.retention.failures`. **GDPR**: `GET /connections/{id}/export` (paged per section, stored rows as JSON,
+credentials and webhook secrets only as "set" flags), `POST /connections/{id}/erase` (the connection and every derived
+row in every module, in one transaction, even while used; then the token is revoked; audited) and
+`POST /connections/{id}/erase-record` (events keyed by or carrying the id deleted, its side of sync links cleared and
+the pair kept `ORPHANED`, finished workflow runs and tool executions carrying it deleted); all `MANAGE_ORGANIZATION`.
+A plain `DELETE` of a used connection still answers `409`. **Usage**: `integration_usage_daily` (tenant, UTC day,
+metric, count), counted in memory and flushed as upsert increments every `usage.flush-interval` (30 s) and at shutdown:
+`provider.calls` (`ConnectionHttp`), `sync.records` (`SyncEngine`), `workflow.steps` (`WorkflowEngine`),
+`ai.tool_calls` (`ToolExecutions`); `GET /usage?from&to&metric` (member). Migrations: core V5 (usage table, purge
+indexes), sync V5, workflows V3, AI V2 (purge indexes). Revocation moved into `ConnectionCredentials.revoke`, shared by
+delete and erase. REST change (additive): export, erase, erase-record, usage. New tests: `RetentionTest`,
+`UsageMeterTest`, `ConnectionDataApiTest`, `SyncDataLifecycleTest`, `WorkflowDataLifecycleTest`,
+`ToolDataLifecycleTest`, `ConnectionErasureTest` (every module booted together).
+
 ## 2026-11-05 — Example application, container image and Compose
 
 New Gradle project `integrations-app` ([#45](https://github.com/wasichai/integrations/issues/45), ADR-0028), never

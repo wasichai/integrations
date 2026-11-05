@@ -35,3 +35,4 @@ supersedes it and says so in its status line.
 - [ADR-0026: AI tools are explicitly exposed, sensitive by default, and run through one audited execution path](0026-ai-tools.md)
 - [ADR-0027: The MCP endpoint is a stateless JSON-RPC interface over the tool catalog and its one execution path](0027-mcp-endpoint.md)
 - [ADR-0028: An unpublished example app ships as one image with two roles, configured by the environment only](0028-example-app-and-image.md)
+- [ADR-0029: Retention, GDPR export and erasure, and usage metering are core SPIs each module fills for its own tables](0029-retention-gdpr-usage.md)

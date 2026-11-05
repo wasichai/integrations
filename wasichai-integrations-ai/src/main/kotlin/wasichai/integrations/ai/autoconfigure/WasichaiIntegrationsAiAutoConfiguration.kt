@@ -19,8 +19,12 @@ import wasichai.integrations.ConnectorContexts
 import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.IntegrationsAccess
 import wasichai.integrations.IntegrationsMeters
+import wasichai.integrations.RetentionTask
+import wasichai.integrations.SqlRetentionTask
 import wasichai.integrations.Transactions
+import wasichai.integrations.UsageMeter
 import wasichai.integrations.ai.ToolCatalog
+import wasichai.integrations.ai.ToolConnectionData
 import wasichai.integrations.ai.ToolController
 import wasichai.integrations.ai.ToolExecutions
 import wasichai.integrations.ai.ToolRateLimits
@@ -29,6 +33,7 @@ import wasichai.integrations.ai.mcp.McpController
 import wasichai.integrations.ai.mcp.McpServer
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import java.time.Clock
+import java.time.Duration
 
 // AI tools (ADR-0026): the catalog of explicitly exposed tools and the one execution path. needs the integrations
 // module and its tables, nothing of sync or workflows
@@ -88,9 +93,36 @@ class WasichaiIntegrationsAiAutoConfiguration {
         integrationsTransactions: Transactions,
         meters: IntegrationsMeters,
         json: JsonMapper,
-        clock: Clock
+        clock: Clock,
+        usage: UsageMeter
     ): ToolExecutions =
-        ToolExecutions(access, currentUser, repository, registry, connections, contexts, limits, audit, integrationsTransactions, meters, json, clock)
+        ToolExecutions(access, currentUser, repository, registry, connections, contexts, limits, audit, integrationsTransactions, meters, json, clock, usage)
+
+    // GDPR export and erasure of a connection (ADR-0029): the tools on it and their executions
+    @Bean
+    @ConditionalOnMissingBean
+    fun toolConnectionData(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): ToolConnectionData = ToolConnectionData(db, json, schemas)
+
+    // retention (ADR-0029): finished executions only; one waiting for approval, or running, is never purged
+    @Bean
+    fun toolExecutionsRetention(
+        db: DatabaseClient,
+        schemas: WasichaiSchemas
+    ): RetentionTask {
+        val m = schemas.metadata
+        return SqlRetentionTask(
+            "ai.executions",
+            "integration_ai_tool_executions",
+            Duration.ofDays(180),
+            db,
+            "DELETE FROM $m.integration_ai_tool_executions WHERE id IN (SELECT id FROM $m.integration_ai_tool_executions " +
+                "WHERE status IN ('SUCCEEDED', 'FAILED', 'REJECTED') AND finished_at < :cutoff ORDER BY finished_at LIMIT :limit FOR UPDATE SKIP LOCKED)"
+        )
+    }
 
     @Bean
     fun toolController(

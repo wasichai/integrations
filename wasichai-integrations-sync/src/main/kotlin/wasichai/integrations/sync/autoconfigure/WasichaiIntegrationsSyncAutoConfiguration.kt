@@ -18,9 +18,13 @@ import wasichai.integrations.ConnectorRegistry
 import wasichai.integrations.IntegrationsAccess
 import wasichai.integrations.IntegrationsMeters
 import wasichai.integrations.JobRepository
+import wasichai.integrations.RetentionTask
+import wasichai.integrations.SqlRetentionTask
 import wasichai.integrations.Transactions
+import wasichai.integrations.UsageMeter
 import wasichai.integrations.autoconfigure.WasichaiIntegrationsAutoConfiguration
 import wasichai.integrations.sync.DefinitionValidator
+import wasichai.integrations.sync.SyncConnectionData
 import wasichai.integrations.sync.SyncDefinitionController
 import wasichai.integrations.sync.SyncDefinitionRepository
 import wasichai.integrations.sync.SyncDefinitionService
@@ -31,6 +35,7 @@ import wasichai.integrations.sync.SyncRunRepository
 import wasichai.integrations.sync.SyncScheduler
 import wasichai.integrations.sync.SyncStateRepository
 import java.time.Clock
+import java.time.Duration
 
 // synchronization between two connections (ADR-0009). needs the integrations module and its tables.
 @AutoConfiguration(after = [WasichaiIntegrationsAutoConfiguration::class])
@@ -105,8 +110,58 @@ class WasichaiIntegrationsSyncAutoConfiguration {
         integrationsTransactions: Transactions,
         meters: IntegrationsMeters,
         properties: SyncProperties,
-        clock: Clock
-    ): SyncEngine = SyncEngine(definitions, state, runs, registry, connections, contexts, jobs, integrationsTransactions, meters, properties, clock)
+        clock: Clock,
+        usage: UsageMeter
+    ): SyncEngine = SyncEngine(definitions, state, runs, registry, connections, contexts, jobs, integrationsTransactions, meters, properties, clock, usage)
+
+    // GDPR export and erasure of a connection (ADR-0029): the definitions on it and their state
+    @Bean
+    @ConditionalOnMissingBean
+    fun syncConnectionData(
+        db: DatabaseClient,
+        json: JsonMapper,
+        schemas: WasichaiSchemas
+    ): SyncConnectionData = SyncConnectionData(db, json, schemas)
+
+    // retention (ADR-0029). the last run of each definition and trigger, and its last successful one, are kept:
+    // the scheduler and the status read them
+    @Bean
+    fun syncRunsRetention(
+        db: DatabaseClient,
+        schemas: WasichaiSchemas
+    ): RetentionTask {
+        val m = schemas.metadata
+        return SqlRetentionTask(
+            "sync.runs",
+            "integration_sync_runs",
+            Duration.ofDays(90),
+            db,
+            "DELETE FROM $m.integration_sync_runs WHERE id IN (SELECT r.id FROM $m.integration_sync_runs r " +
+                "WHERE r.status IN ('SUCCEEDED', 'PARTIAL', 'FAILED') AND r.finished_at < :cutoff " +
+                "AND EXISTS (SELECT 1 FROM $m.integration_sync_runs n WHERE n.definition_id = r.definition_id AND n.trigger = r.trigger " +
+                "AND n.queued_at > r.queued_at) " +
+                "AND (r.status <> 'SUCCEEDED' OR EXISTS (SELECT 1 FROM $m.integration_sync_runs s WHERE s.definition_id = r.definition_id " +
+                "AND s.status = 'SUCCEEDED' AND s.queued_at > r.queued_at)) " +
+                "ORDER BY r.finished_at LIMIT :limit FOR UPDATE SKIP LOCKED)"
+        )
+    }
+
+    // only resolved conflicts: an open one waits for a person, whatever its age
+    @Bean
+    fun syncConflictsRetention(
+        db: DatabaseClient,
+        schemas: WasichaiSchemas
+    ): RetentionTask {
+        val m = schemas.metadata
+        return SqlRetentionTask(
+            "sync.conflicts",
+            "integration_sync_conflicts",
+            Duration.ofDays(180),
+            db,
+            "DELETE FROM $m.integration_sync_conflicts WHERE id IN (SELECT id FROM $m.integration_sync_conflicts " +
+                "WHERE status = 'RESOLVED' AND resolved_at < :cutoff ORDER BY resolved_at LIMIT :limit FOR UPDATE SKIP LOCKED)"
+        )
+    }
 
     @Bean
     @ConditionalOnMissingBean
