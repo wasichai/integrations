@@ -29,16 +29,22 @@ and [ADR-0010](../adr/0010-loop-prevention.md).
 4. Diff against the snapshot: fields changed on this side.
 5. Read the other side's current values (or its last seen version) and diff them against the snapshot: fields changed
    there since the last sync.
-6. For a field changed only here: it flows if this side may write it (owner is this side or `BOTH`).
-7. For a field changed on both sides to different values, apply its strategy:
-   - `OWNER_WINS` — the owner's value is kept (the default when the owner is one side);
-   - `SOURCE_WINS` / `TARGET_WINS` — fixed per definition direction;
-   - `LAST_WRITE_WINS` — only when both connectors declare reliable modification timestamps for the resource;
-     otherwise refused at validation;
-   - `MANUAL` — a conflict row is stored, the link goes to `CONFLICT`, **nothing is written** for that pair until a
-     person resolves it.
+6. For a field changed only here: it flows if this side may write it (owner is this side or `BOTH`); otherwise it keeps
+   its old snapshot entry and stays pending, never forgotten.
+7. For a field changed on both sides to different values (values equal through the transform are no clash), the
+   owner decides: a field owned by `A` or `B` takes that side's value. A `BOTH` field (bidirectional definitions only)
+   applies its `conflictStrategy` (`MergePlanner`):
+   - `MANUAL` (the default) — a conflict row is stored, the link goes to `CONFLICT`, **nothing is written** for that
+     pair until a person resolves it;
+   - `A_WINS` / `B_WINS` — that side's value is kept;
+   - `SOURCE_WINS` — the value of the side whose change is being processed is kept;
+   - `LAST_WRITE_WINS` — the record with the later `modifiedAt` wins (the source on a tie). It is not refused at
+     validation: when either side has no `modifiedAt` (the connector reports none it can rely on), the field becomes a
+     conflict at run time, as with `MANUAL`.
+
+   A winner whose value may not flow to the other side also leaves a conflict.
 8. Write the target with the expected version when the connector supports conditional writes; a `Conflict` error
-   re-reads and restarts at step 4 (bounded).
+   re-reads both sides and merges once more, and a second `Conflict` opens a conflict for a person.
 9. In one transaction: new versions, the written hash, the new snapshot, the run counters.
 
 ## Creates without duplicates
@@ -58,9 +64,17 @@ pair. A recovery the provider refuses is treated as none: the first attempt may 
 
 ## Deletes
 
-Per definition `deletePolicy`: `PROPAGATE` (delete or archive the other side), `IGNORE` (unlink), `FLAG` (link
-`ORPHANED`, shown in the operational view). Deletes come from provider feeds where they exist (Salesforce `deleted`,
-Notion archived/trashed pages) and from reconciliation.
+Per definition `deletePolicy` (`SyncEngine`), when a linked record is deleted on one side:
+
+- `FLAG` (the default): the link becomes `ORPHANED` and a `DELETED` conflict is opened for a person; resolving it
+  unlinks the pair.
+- `PROPAGATE`: when the direction lets the deleted side flow, the other record is deleted through the connector (Notion
+  moves the page to the trash; already gone counts as done) and the link is removed. Against the direction it behaves
+  as `IGNORE`.
+- `IGNORE`: the link becomes `ORPHANED` and the other record stays; no conflict is opened.
+
+Deletes come from provider feeds where they exist (Salesforce `deleted`), from a read that finds the record gone
+(Notion archived or trashed pages) and from reconciliation.
 
 ## Reconciliation
 

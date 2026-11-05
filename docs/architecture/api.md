@@ -340,8 +340,8 @@ to A through the mapping's inverse transform (an enum map backwards, a date-time
 values are written where the direction allows, the snapshot
 records them, and the link is `LINKED` again. A `DELETED` conflict ignores the body: resolving it unlinks the pair
 (`resolution: {choice: "UNLINK"}`) and the conflict stays as history. Errors: `400` invalid choice, a missing custom
-value, a pick other than `A` or `B`, or a pick of B without an inverse; `404` the conflict, or its link, no longer exists; `409` already resolved (or resolved meanwhile), a record gone
-or changed while resolving.
+value, a pick other than `A` or `B`, or a pick of B without an inverse; `404` the conflict, or its link, no longer
+exists; `409` already resolved (or resolved meanwhile), a record gone or changed while resolving.
 
 ## Not implemented yet
 
@@ -349,6 +349,3 @@ Planned in Phase 0 and absent from the code:
 
 - `Idempotency-Key` on creates, and paged list envelopes (`{content, page, size, totalElements, …}`) outside `/events`.
 - An `eventType` filter on `/events`; a keyset cursor on `/jobs`.
-- `409` on deleting a connection or a provider config that is still used (both delete; a connection's definitions go
-  with it).
-- Per-field resolution choices: one `choice` covers every field of a conflict.

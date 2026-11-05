@@ -2,6 +2,17 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Docs: api, security model and sync semantics aligned with the code
+
+The docs now say what the code does ([#59](https://github.com/wasichai/integrations/issues/59)). `api.md` no longer
+lists the `409` on deleting a used connection or provider app, nor per-field resolution, as missing. The security
+model names `wasichai.integrations.encryption.keys.<id>`, drops the re-encrypt job (secrets are re-sealed only when
+written again, webhook secrets never), says losing every key is an unexpected error today (#60), that `PlatformHttp`
+takes http and https and blocks private addresses in its resolver, that `instance_url` has no host allowlist and that
+retention is not built (#46). Sync semantics use the code's strategies (`SOURCE_WINS`, `A_WINS`, `B_WINS`,
+`LAST_WRITE_WINS`, `MANUAL`) and delete policies. ADR-0017 supersedes ADR-0012 on registration: connectors are plain
+SDK libraries and the app declares their beans. The deployment guide lists the Jira connector. REST change: none.
+
 ## 2026-11-04 — Jira Cloud connector
 
 `integrations-connector-jira` connects Jira Cloud by OAuth 2.0 (3LO) through `api.atlassian.com`, the site found

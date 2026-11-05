@@ -20,17 +20,22 @@ Service accounts follow Wasichai's rules (never `ADMIN`).
 
 ## Secrets ([ADR-0005](../adr/0005-secret-management.md))
 
-- AES-256-GCM, a fresh 96-bit nonce per encryption, additional authenticated data = organization id + owner row id,
-  so a ciphertext copied to another row or tenant does not decrypt.
-- Each row stores the `key_id` it was encrypted with. Keys come from a `CredentialKeyProvider`; the default reads a key
-  ring from configuration (`wasichai.integrations.vault.keys.<id>` base64 32-byte keys, `active-key`), so a self-hosted
-  install keeps keys in its own secret store or environment.
-- Rotation: add a key, make it active; new writes use it, old rows still decrypt; a re-encrypt job moves old rows; the
-  old key is removed only when no row names it.
-- Recovery: losing every key makes credentials unreadable by design; connections go to `NEEDS_REAUTH` and are
-  reconnected. Back keys up with the database.
-- Secrets are write-only over REST and masked (`"••••"` plus last 4 characters at most) everywhere; logs and metrics
-  never include them; HTTP logging redacts `Authorization`, cookies and known token fields.
+- AES-256-GCM, a fresh 96-bit nonce per encryption, additional authenticated data = organization id, table, row id and
+  column (`CredentialCipher`), so a ciphertext copied to another row or tenant does not decrypt.
+- The sealed value names the key it was sealed with (`v1.<keyId>.<nonce>.<ciphertext>`). Keys come from a
+  `CredentialKeyProvider`; the default reads a key ring from configuration (`wasichai.integrations.encryption.keys.<id>`,
+  base64 of 32 random bytes, and `wasichai.integrations.encryption.active-key`), so a self-hosted install keeps keys in
+  its own secret store or environment. The module does not start without a key and an active key.
+- Rotation: add a key, make it active; new writes use it, old rows still decrypt. There is no re-encrypt job: a secret
+  is re-sealed with the active key only when it is written again (connection credentials on a token refresh or a
+  reconnect, a provider app's client secret on its next `PUT`); webhook signing secrets are never re-sealed. The old key
+  is removed only when no row names it ([deployment guide](../guides/deployment.md#encryption-keys-and-rotation)).
+- Recovery: losing every key makes credentials unreadable by design. Today an unreadable secret surfaces as an
+  unexpected error on the call that needs it, not as `NEEDS_REAUTH`
+  ([#60](https://github.com/wasichai/integrations/issues/60)); the connection is reconnected (or the provider app or
+  webhook endpoint saved again). Back keys up with the database.
+- Secrets are write-only over REST and never returned: views only say whether one is set (`clientSecretSet`,
+  `secretSet`). Logs and metrics never include them; the platform does not log provider requests, headers or bodies.
 
 ## OAuth ([ADR-0006](../adr/0006-oauth-flows.md))
 
@@ -52,13 +57,18 @@ the provider signs one. OAuth states are single use.
 
 ## Outbound calls (SSRF)
 
-`ProviderHttp` allows only `https` (plain `http` only when explicitly allowed for tests), resolves the host and refuses
-loopback, private, link-local and multicast addresses, as Wasichai's automation `WebhookSender` does. Base URLs come
-from connector code or provider metadata (Salesforce `instance_url` must match `*.salesforce.com` / `*.force.com`
-patterns declared by the connector), never from free user input.
+Every provider call leaves through `PlatformHttp`, behind each connection's `ProviderHttp`. It accepts only absolute
+`http` or `https` urls without user info. Its guarded DNS resolver (`GuardedResolverGroup`) checks every address the
+host resolves to and refuses loopback, private (site-local and IPv6 unique local), link-local, wildcard and multicast
+ones (`PermissionDenied`), unless `wasichai.integrations.http.allow-private-addresses` is on (tests, labs). The address
+netty connects to is the one checked, so a DNS rebinding cannot answer differently on a second lookup. Base URLs come
+from connector code, connector configuration or provider metadata (Salesforce's `instance_url` from the token response),
+never from free user input; there is no host allowlist for `instance_url` beyond the private-address check.
 
 ## Retention and data protection
 
-Event payloads and snapshots contain provider data: retention is configurable and purges run per tenant. Deleting a
-connection deletes its credentials and webhook endpoints; deleting a tenant's integrations data is a per-org purge of
-these tables. Export for GDPR requests is out of the MVP and planned for Phase 8.
+Event payloads and snapshots contain provider data. There is no retention setting and no purge of events, runs or
+snapshots yet ([#46](https://github.com/wasichai/integrations/issues/46)); only expired OAuth states are purged.
+Deleting a connection deletes its credentials, webhook endpoints and events (foreign keys cascade); deleting an
+organization cascades to every integrations table of that tenant. Export for GDPR requests is out of the MVP and
+planned for Phase 8.
