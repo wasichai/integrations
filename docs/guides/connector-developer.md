@@ -261,9 +261,9 @@ class ConnectorsConfiguration {
 
 `integrations-integration-tests` registers both shipped connectors exactly this way (`IntegrationsTestApplication`). The
 shipped connector modules have no Spring dependency and no auto-configuration of their own, so adding the dependency
-alone registers nothing. A third-party connector may ship a Spring auto-configuration that declares its `Connector`
-bean (ADR-0012 describes that as the distribution model); keep its SDK code free of Spring either way and guard the bean
-with `@ConditionalOnMissingBean` so an app can replace it.
+alone registers nothing ([ADR-0017](../adr/0017-connectors-as-plain-libraries.md), which supersedes ADR-0012 on this
+point). A third-party connector may ship a Spring auto-configuration that declares its `Connector` bean; keep its SDK
+code free of Spring either way and guard the bean with `@ConditionalOnMissingBean` so an app can replace it.
 
 A connector runs in-process with the platform's trust ([ADR-0003](../adr/0003-in-process-trusted-connectors.md)):
 install only code you would run in your app.

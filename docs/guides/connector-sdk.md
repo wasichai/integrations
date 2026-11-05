@@ -3,7 +3,8 @@
 The contracts a connector implements, as they are in `integrations-connector-sdk` (package `wasichai.integrations.sdk`).
 The SDK has no Spring dependency: a connector is plain Kotlin plus coroutines and Jackson 3. Decisions behind it:
 [ADR-0002](../adr/0002-connector-sdk-contracts.md), [ADR-0003](../adr/0003-in-process-trusted-connectors.md),
-[ADR-0004](../adr/0004-connector-manifest-versioning-and-maturity.md), [ADR-0012](../adr/0012-connector-distribution-and-versioning.md).
+[ADR-0004](../adr/0004-connector-manifest-versioning-and-maturity.md), [ADR-0012](../adr/0012-connector-distribution-and-versioning.md),
+[ADR-0017](../adr/0017-connectors-as-plain-libraries.md).
 
 To write one step by step, read the [connector developer guide](connector-developer.md).
 

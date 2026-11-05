@@ -37,10 +37,11 @@ The token needs `read:packages`. What each artifact brings:
 | `wasichai-spring-boot-starter-integrations` | the Wasichai starter plus `wasichai-integrations` (connections, OAuth, webhooks, events, jobs, health) |
 | `wasichai-spring-boot-starter-integrations-sync` | the above plus `wasichai-integrations-sync` (definitions, engine, scheduler, conflicts) |
 | `wasichai-integrations`, `wasichai-integrations-sync` | the modules alone, for an app that assembles Wasichai itself |
-| `integrations-connector-notion`, `integrations-connector-salesforce` | the shipped connectors (no Spring) |
+| `integrations-connector-notion`, `integrations-connector-salesforce`, `integrations-connector-jira` | the shipped connectors (no Spring) |
 | `integrations-connector-sdk`, `integrations-connector-sdk-test` | for writing and testing connectors |
 
-Then declare the connectors you want as beans; adding a connector dependency registers nothing by itself:
+Then declare the connectors you want as beans; adding a connector dependency registers nothing by itself
+([ADR-0017](../adr/0017-connectors-as-plain-libraries.md)):
 
 ```kotlin
 @Configuration
@@ -55,7 +56,9 @@ class ConnectorsConfiguration {
 
 `SalesforceConfig(loginUrl = "https://test.salesforce.com")` targets sandboxes (or a My Domain url), and `apiVersion`
 pins a REST API version (`"66.0"`; by default the instance's newest). `NotionConfig` pins the `Notion-Version` header
-(`2025-09-03`). Each connector bean is validated at start-up; an invalid manifest or a duplicate id stops the app.
+(`2025-09-03`). `JiraConfig(siteUrl = "https://acme.atlassian.net")` enables API token connections against that site,
+and `cloudId` pins one site when an OAuth grant reaches several ([ADR-0016](../adr/0016-jira-cloud-connector.md)). Each
+connector bean is validated at start-up; an invalid manifest or a duplicate id stops the app.
 
 The modules need what the Wasichai starter provides: PostgreSQL through R2DBC, Wasichai's JWT security and
 `CurrentUser`, `WasichaiSchemas`, and the cluster lock. Each module runs its own Flyway history: `integrations`
@@ -164,6 +167,8 @@ Connector specifics:
 - Notion: the app's client secret is required (no PKCE); the authorize url carries `owner=user`. An internal integration
   token can be used instead of OAuth (`authType: API_KEY`), for a single workspace.
 - Salesforce: PKCE; default scopes `api refresh_token`; the token response's `instance_url` is kept with the connection.
+- Jira: OAuth 2.0 (3LO) with the app's client secret (no PKCE, no revocation); default scopes include
+  `offline_access` for a refresh token. The site is found from the grant's accessible resources on use.
 
 ## Webhooks
 
