@@ -33,6 +33,12 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
     @Autowired
     private lateinit var held: HeldConnections
 
+    @Autowired
+    private lateinit var connections: ConnectionRepository
+
+    @Autowired
+    private lateinit var contexts: ConnectorContexts
+
     private val stub = StubProvider.server
     private val tenant by lazy { TestTenant.provision(client).also { configure(it) } }
     private val other by lazy { TestTenant.provision(client) }
@@ -210,6 +216,20 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
                 .header("Authorization")!!
                 .startsWith("Bearer at-refreshed-")
         )
+    }
+
+    @Test
+    fun `credential headers lent to another transport are the stored token, and a refresh renews it once`() {
+        val (id, _) = connect()
+        runBlocking {
+            val http = contexts.forConnection(connections.find(tenant.organizationId, id)!!).http
+            assertEquals(mapOf("Authorization" to "Bearer at-1"), http.credentialHeaders())
+            val calls = tokenCalls.get()
+            val fresh = http.credentialHeaders(refresh = true).getValue("Authorization")
+            assertTrue(fresh.startsWith("Bearer at-refreshed-"), fresh)
+            assertEquals(calls + 1, tokenCalls.get())
+            assertEquals(fresh, http.credentialHeaders().getValue("Authorization"))
+        }
     }
 
     @Test

@@ -17,7 +17,9 @@ import java.time.Clock
 // a plain ProviderHttp for connector tests: sends what the connector asks, adds a bearer token.
 // the platform's real one also rate limits, checks hosts and redacts; tests of those live with it.
 class KitProviderHttp(
-    private val bearerToken: String? = "test-token"
+    private val bearerToken: String? = "test-token",
+    // what credentialHeaders(refresh = true) answers: a stub provider can refuse the first token and accept this one
+    private val refreshedToken: String? = null
 ) : ProviderHttp {
     private val client = HttpClient.create()
 
@@ -45,6 +47,10 @@ class KitProviderHttp(
                 }
             }.awaitSingle()
     }
+
+    // what a connector hands a transport of its own (grpc); refresh asks for a renewed token
+    override suspend fun credentialHeaders(refresh: Boolean): Map<String, String> =
+        bearerToken?.let { mapOf("Authorization" to "Bearer " + (if (refresh) refreshedToken ?: it else it)) } ?: emptyMap()
 
     companion object {
         fun withQuery(

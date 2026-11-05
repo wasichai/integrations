@@ -13,6 +13,7 @@ integrations-connector-jira
 integrations-connector-notion
 integrations-connector-openapi
 integrations-connector-salesforce
+integrations-connector-salesforce-pubsub
 integrations-connector-sdk
 integrations-connector-sdk-test
 integrations-connector-slack

@@ -29,6 +29,14 @@ class ConnectionHttp(
         return send(request.copy(headers = request.headers + ("Authorization" to "Bearer ${fresh.orEmpty()}")))
     }
 
+    // the same headers for a transport the connector runs itself (a grpc stream); refresh once when it was refused
+    override suspend fun credentialHeaders(refresh: Boolean): Map<String, String> {
+        val headers = credentials.headers(connection)
+        if (!refresh || !credentials.canRefresh(connection)) return headers
+        val stale = headers["Authorization"]?.removePrefix("Bearer ")
+        return mapOf("Authorization" to "Bearer ${credentials.refresh(connection, stale).orEmpty()}")
+    }
+
     // the connector's declared rate first; a 429 pauses the connection for what the provider asked
     private suspend fun send(request: ProviderRequest): ProviderResponse {
         val key = connection.id.toString()
@@ -64,6 +72,8 @@ class StaticHttp(
     private val http: PlatformHttp
 ) : ProviderHttp {
     override suspend fun exchange(request: ProviderRequest): ProviderResponse = http.send(request.copy(headers = request.headers + headers))
+
+    override suspend fun credentialHeaders(refresh: Boolean): Map<String, String> = headers
 }
 
 data class PlatformConnectorContext(

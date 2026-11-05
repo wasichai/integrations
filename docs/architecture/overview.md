@@ -17,6 +17,7 @@ wasichai-core (published by wasichai)
    │
 integrations-connector-notion ─────► integrations-connector-sdk
 integrations-connector-salesforce ─► integrations-connector-sdk
+integrations-connector-salesforce-pubsub ─► integrations-connector-salesforce   (+ grpc, protobuf, avro)
 integrations-connector-jira ───────► integrations-connector-sdk
 integrations-connector-github ─────► integrations-connector-sdk
 integrations-connector-slack ──────► integrations-connector-sdk

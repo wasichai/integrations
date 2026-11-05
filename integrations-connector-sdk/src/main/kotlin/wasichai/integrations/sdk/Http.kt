@@ -8,6 +8,13 @@ import java.time.Duration
 // ssrf checks, redaction and metrics; the connector never sees a secret.
 interface ProviderHttp {
     suspend fun exchange(request: ProviderRequest): ProviderResponse
+
+    // for a transport this interface cannot carry (salesforce's grpc pub/sub api, ADR-0024): the connection's
+    // credential headers, handed straight to that transport and never kept, logged or returned. refresh: the
+    // provider refused the last ones, so the platform renews an oauth token once (as exchange does on a 401).
+    // sdk 1.1; a platform that cannot lend credentials says so instead of guessing
+    suspend fun credentialHeaders(refresh: Boolean = false): Map<String, String> =
+        throw UnsupportedOperationException("this platform does not lend credentials to other transports")
 }
 
 enum class HttpMethod {

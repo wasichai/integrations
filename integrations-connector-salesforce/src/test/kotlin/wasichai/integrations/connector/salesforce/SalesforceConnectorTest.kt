@@ -170,6 +170,19 @@ class SalesforceConnectorTest {
     }
 
     @Test
+    fun `reads many records by id in one query, following its pages`() {
+        val next = "$API/query/01gD0000002HU6KIAW-200"
+        stub.onJson(HttpMethod.GET, "$API/query/", query(listOf(account(ID1, "A")), next))
+        stub.onJson(HttpMethod.GET, next, query(listOf(account(ID2, "B"))))
+        val records = runBlocking { connector.readMany(context(), "Account", listOf(ID1, ID2, ID1)) }
+        assertEquals(listOf(ID1, ID2), records.map { it.id })
+        val soql = stub.requests.single { it.path == "$API/query/" }.query["q"]!!
+        assertTrue(soql.endsWith("FROM Account WHERE Id IN ('$ID1', '$ID2')"), soql)
+        assertEquals(emptyList<Any>(), runBlocking { connector.readMany(context(), "Account", emptyList()) })
+        assertThrows<ConnectorException.Permanent> { runBlocking { connector.readMany(context(), "Account", listOf("1' OR Name != '")) } }
+    }
+
+    @Test
     fun `a cursor that is not a query path is refused`() {
         assertThrows<ConnectorException.Permanent> {
             runBlocking { connector.list(context(), ReadRequest("Account", cursor = "https://evil.example/steal")) }

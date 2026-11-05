@@ -62,6 +62,10 @@ validation. Nothing executes yet ([#42](https://github.com/wasichai/integrations
 
 - `integrations-connector-notion`: OAuth, data sources, page properties, webhooks (HMAC), rate limits.
 - `integrations-connector-salesforce`: OAuth + PKCE, describe, SOQL, CRUD, external-id upsert, incremental polling.
+- `integrations-connector-salesforce-pubsub`: the Salesforce connector with Change Data Capture for the objects given a
+  channel: a bounded pull over the Pub/Sub API (gRPC, Avro) per `changes()` call, replay ids stored as received, records
+  fetched by id, a full read and reconciliation after an expired replay id or a gap event; other objects keep polling.
+  Kept apart so polling users pull no gRPC ([ADR-0024](../adr/0024-salesforce-cdc-pub-sub.md)).
 - `integrations-connector-jira`: Jira Cloud by OAuth 2.0 (3LO, through the API gateway) or API token; projects and
   issue fields (custom ones included), enhanced JQL search, incremental polling on `updated`, issue CRUD with rich text
   as plain-text ADF, transitions and dynamic webhooks as actions, webhooks verified by HMAC or the app's JWT
