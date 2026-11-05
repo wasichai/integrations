@@ -2,6 +2,19 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Slack connector
+
+`integrations-connector-slack` connects a Slack workspace through the Web API by OAuth v2 (bot token, comma-separated
+scopes, token rotation through the platform's refresh) or a pasted bot token; the account is the team id, prefixed by
+the enterprise id on a grid ([#39](https://github.com/wasichai/integrations/issues/39)). Channels the bot is in are the
+resources and their messages the records (ts as id, `edited.ts` as version; thread replies left out); reads page by
+`next_cursor`, the change feed reads the history from ten seconds before the newest ts seen (at least once; tombstones
+are deletions, other edits and deletions come through events), writes post, edit (read-compare-write, read back for the
+version) and delete messages as text. `ok:false` codes and 429 map to the taxonomy. Events API deliveries are verified
+by `X-Slack-Signature` within five minutes, `url_verification` is answered, `event_id` keys retries; `WEBHOOKS` is
+`TESTED` against Slack's published example (ADR-0020). REST change: none. New tests: `SlackConnectorTest`,
+`SlackContractTest`, `SlackWebhooksTest`, `SlackValuesTest`.
+
 ## 2026-11-05 — GitHub connector
 
 `integrations-connector-github` connects github.com or GitHub Enterprise Server through REST API v3 by OAuth app or
