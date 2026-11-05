@@ -11,6 +11,7 @@ expected="integrations-bom
 integrations-connector-github
 integrations-connector-jira
 integrations-connector-notion
+integrations-connector-openapi
 integrations-connector-salesforce
 integrations-connector-sdk
 integrations-connector-sdk-test

@@ -38,6 +38,7 @@ The token needs `read:packages`. What each artifact brings:
 | `wasichai-spring-boot-starter-integrations-sync` | the above plus `wasichai-integrations-sync` (definitions, engine, scheduler, conflicts) |
 | `wasichai-integrations`, `wasichai-integrations-sync` | the modules alone, for an app that assembles Wasichai itself |
 | `integrations-connector-notion`, `-salesforce`, `-jira`, `-github`, `-slack` | the shipped connectors (no Spring) |
+| `integrations-connector-openapi` | a connector for any REST API with an OpenAPI 3 document, configured in code (no Spring) |
 | `integrations-connector-sdk`, `integrations-connector-sdk-test` | for writing and testing connectors |
 
 Then declare the connectors you want as beans; adding a connector dependency registers nothing by itself

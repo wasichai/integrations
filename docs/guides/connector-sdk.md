@@ -173,16 +173,22 @@ Shipped connectors today:
 | `jira` (`integrations-connector-jira`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `ACTIONS`, `WEBHOOKS`¹ | OAuth 3LO, API token |
 | `github` (`integrations-connector-github`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth code with PKCE, PAT |
 | `slack` (`integrations-connector-slack`) | `AUTHENTICATION`, `DISCOVERY`, `READ`, `CHANGE_FEED`, `WRITE`, `WEBHOOKS` | OAuth v2 without PKCE, bot token |
+| configured id (`integrations-connector-openapi`) | `DISCOVERY`, `READ`; `CHANGE_FEED`, `WRITE` per mapping² | API key header, bearer, OAuth code |
 
 Salesforce's change feed polls `SystemModstamp` and the deleted records; Change Data Capture is planned
 ([#14](https://github.com/wasichai/integrations/issues/14), [ADR-0014](../adr/0014-salesforce-change-capture.md)). Jira's
 choices (site lookup, webhook verification, rich text as plain text) are in
 [ADR-0016](../adr/0016-jira-cloud-connector.md). GitHub's (user tokens only, a fresh-query change feed, deletes refused)
 are in [ADR-0019](../adr/0019-github-connector.md). Slack's (the workspace as the account, a feed of new messages only,
-`ok:false` codes mapped to the taxonomy) are in [ADR-0020](../adr/0020-slack-connector.md). OpenAPI-based connectors are
-planned ([#15](https://github.com/wasichai/integrations/issues/15)).
+`ok:false` codes mapped to the taxonomy) are in [ADR-0020](../adr/0020-slack-connector.md). The OpenAPI
+connector turns an OpenAPI 3 document plus a mapping written in code into a connector
+([#40](https://github.com/wasichai/integrations/issues/40), [ADR-0021](../adr/0021-openapi-connector.md),
+[guide](connector-developer.md#when-you-dont-need-to-write-a-connector-the-openapi-connector)).
 
 ¹ Jira webhooks are `IMPLEMENTED`, not `TESTED`: their verification follows secondary sources (ADR-0016).
+
+² The OpenAPI connector's capabilities are `IMPLEMENTED` by default: its code is tested against a petstore stub, a
+given mapping is not. An app raises them to `TESTED` (`OpenApiConfig.maturity`) once its own tests cover its mapping.
 
 ## ManifestValidator
 

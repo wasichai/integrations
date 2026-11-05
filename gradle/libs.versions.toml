@@ -37,6 +37,8 @@ spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-te
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
+# openapi documents in yaml (integrations-connector-openapi); version from the jackson 3 bom above
+jackson-dataformat-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml" }
 jackson2-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson2" }
 jackson3-bom = { module = "tools.jackson:jackson-bom", version.ref = "jackson3" }
 scram-client = { module = "com.ongres.scram:scram-client", version.ref = "scram" }

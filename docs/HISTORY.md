@@ -2,6 +2,19 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — OpenAPI connector
+
+`integrations-connector-openapi` turns an OpenAPI 3.x document (JSON or YAML) plus an explicit mapping written in code
+into a connector ([#40](https://github.com/wasichai/integrations/issues/40)): per resource the list and get
+`operationId`s, optional create, update and delete, the id field, page, cursor or next-url (body field or `Link`)
+paging, and an updated-at field with an updated-since parameter for the change feed. Fields are derived from the
+response schema with local `$ref`s and `allOf` resolved; auth comes from the document's security scheme (API key in a
+header, HTTP bearer, OAuth authorization code). The manifest declares `DISCOVERY` and `READ`, plus `CHANGE_FEED` and
+`WRITE` only when the mapping provides them, at `IMPLEMENTED` unless the app raises them; no webhooks, no actions. A
+wrong mapping fails at bean creation naming every problem. Errors map by status, the provider's body in details only.
+New dependency: `jackson-dataformat-yaml` (Jackson 3 BOM) for this module (ADR-0021). REST change: none. New tests:
+`OpenApiConnectorTest`, `OpenApiConfigTest`, `OpenApiContractTest`, `OpenApiReadOnlyContractTest`.
+
 ## 2026-11-05 — Slack connector
 
 `integrations-connector-slack` connects a Slack workspace through the Web API by OAuth v2 (bot token, comma-separated
