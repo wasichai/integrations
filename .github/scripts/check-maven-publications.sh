@@ -8,6 +8,7 @@ set -euo pipefail
 repo="${1:?usage: check-maven-publications.sh <local-repo-dir>}"
 
 expected="integrations-bom
+integrations-connector-github
 integrations-connector-jira
 integrations-connector-notion
 integrations-connector-salesforce

@@ -2,6 +2,19 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — GitHub connector
+
+`integrations-connector-github` connects github.com or GitHub Enterprise Server through REST API v3 by OAuth app or
+GitHub App user token (web flow with PKCE) or personal access token; installation tokens are not supported
+([#38](https://github.com/wasichai/integrations/issues/38)). Repositories are the resources and their issues the
+records, pull requests left out; reads page by `Link` (followed only under the configured api), the change feed runs
+a fresh query from a second before the newest `updated_at` (at least once), writes create and edit issues (title,
+body, state, labels, assignees, milestone; read-compare-write on `updated_at`) and refuse deletes, which the REST API
+lacks. Webhooks are verified by `X-Hub-Signature-256`, keyed by `X-GitHub-Delivery`, and `TESTED` against GitHub's
+published sample; 403/429 with `retry-after`, `x-ratelimit-remaining: 0` or a secondary-limit message map to
+`RateLimited` (ADR-0019). REST change: none. New tests: `GitHubConnectorTest`, `GitHubContractTest`,
+`GitHubWebhooksTest`, `GitHubValuesTest`.
+
 ## 2026-11-05 — Silent paths made visible: deletions against the direction, unchecked accounts, unreadable keys
 
 Three paths that gave up without a trace now say so (issue #60, ADR-0018). A `PROPAGATE` deletion the direction
