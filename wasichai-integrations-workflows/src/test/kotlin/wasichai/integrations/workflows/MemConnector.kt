@@ -31,9 +31,10 @@ import wasichai.integrations.sdk.WebhookVerification
 import wasichai.integrations.sdk.WriteResult
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 // a minimal in-memory provider for workflow tests (after the sync module's MemConnector): one described
-// resource, writes that only count. workflows do not run yet, so nothing here is read back
+// resource; writes are recorded per connection, so a test can count them (a step repeated would show)
 open class MemConnector(
     id: String,
     upserts: Boolean = false
@@ -60,6 +61,20 @@ open class MemConnector(
 
     override suspend fun accountInfo(context: ConnectorContext) = AccountInfo("mem-account-${UUID.randomUUID()}")
 
+    // per connection: (operation, resource, fields)
+    private val log = ConcurrentHashMap<String, MutableList<Triple<String, String, Map<String, FieldValue>>>>()
+
+    fun writes(connection: String): List<Triple<String, String, Map<String, FieldValue>>> = log[connection].orEmpty().toList()
+
+    protected fun record(
+        context: ConnectorContext,
+        operation: String,
+        resource: String,
+        fields: Map<String, FieldValue>
+    ) {
+        log.computeIfAbsent(context.connectionId) { java.util.Collections.synchronizedList(mutableListOf()) }.add(Triple(operation, resource, fields))
+    }
+
     override suspend fun listResources(context: ConnectorContext) = listOf(ResourceDescriptor("contacts", "Contacts"))
 
     // "ghosts" is declared but gone at the provider: what describe-time validation must catch
@@ -75,7 +90,18 @@ open class MemConnector(
         context: ConnectorContext,
         resource: String,
         fields: Map<String, FieldValue>
-    ) = WriteResult(UUID.randomUUID().toString(), "1", Instant.now(), true)
+    ): WriteResult {
+        // a name "fail:permanent" fails the create; "fail:<n>" fails it transiently n times, then it works
+        when (val fail = (fields["name"] as? FieldValue.Text)?.value?.takeIf { it.startsWith("fail:") }?.removePrefix("fail:")) {
+            "permanent" -> throw ConnectorException.Permanent("refused by the provider")
+            null -> Unit
+            else -> if (transientFailures.merge(context.connectionId + fail, 1, Int::plus)!! <= fail.toInt()) throw ConnectorException.Transient("try later")
+        }
+        record(context, "create", resource, fields)
+        return WriteResult(UUID.randomUUID().toString(), "1", Instant.now(), true)
+    }
+
+    private val transientFailures = ConcurrentHashMap<String, Int>()
 
     override suspend fun update(
         context: ConnectorContext,
@@ -83,13 +109,16 @@ open class MemConnector(
         id: String,
         fields: Map<String, FieldValue>,
         expectedVersion: String?
-    ) = WriteResult(id, "2", Instant.now(), false)
+    ): WriteResult {
+        record(context, "update", resource, fields)
+        return WriteResult(id, "2", Instant.now(), false)
+    }
 
     override suspend fun delete(
         context: ConnectorContext,
         resource: String,
         id: String
-    ) = Unit
+    ) = record(context, "delete", resource, mapOf("id" to FieldValue.Text(id)))
 
     companion object {
         val SCHEMA =
@@ -121,7 +150,10 @@ class MemUpserter(
         externalIdField: String,
         externalId: String,
         fields: Map<String, FieldValue>
-    ) = WriteResult(externalId, "1", Instant.now(), true)
+    ): WriteResult {
+        record(context, "upsert", resource, fields + (externalIdField to FieldValue.Text(externalId)))
+        return WriteResult(externalId, "1", Instant.now(), true)
+    }
 }
 
 // a provider with actions and webhook events, no records
@@ -151,11 +183,21 @@ class MemMessenger(
 
     override suspend fun accountInfo(context: ConnectorContext) = AccountInfo("mem-account-${UUID.randomUUID()}")
 
+    // per connection: the inputs it was called with
+    private val calls = ConcurrentHashMap<String, MutableList<JsonNode>>()
+
+    fun calls(connection: String): List<JsonNode> = calls[connection].orEmpty().toList()
+
+    // an input "fail": "permanent" fails the action; the action answers its input otherwise
     override suspend fun execute(
         context: ConnectorContext,
         action: String,
         input: JsonNode
-    ): JsonNode = input
+    ): JsonNode {
+        if (input.path("fail").asString("") == "permanent") throw ConnectorException.Permanent("refused by the provider")
+        calls.computeIfAbsent(context.connectionId) { java.util.Collections.synchronizedList(mutableListOf()) }.add(input)
+        return input
+    }
 
     override fun verify(
         request: WebhookRequest,

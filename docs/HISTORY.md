@@ -2,6 +2,27 @@
 
 Newest first. Architectural reasoning lives in `docs/adr/`; this file records what shipped.
 
+## 2026-11-05 — Workflow execution, triggers and approvals
+
+Published workflows now run ([#42](https://github.com/wasichai/integrations/issues/42), ADR-0025). A run is a row
+pinned to its version; each step is a row and a job of kind `integrations.workflow.step` (dedupe key
+`exec:<run>:step:<step>`). A step's result and the next steps are written in one transaction under the run's row lock,
+so a finished step is never repeated and a crash resumes at the unfinished step; provider calls are at least once
+(`upsert` is idempotent; the SDK has no idempotency key, a stable per-step key is stored for later). Conditions are
+evaluated (the closed set, total: no value compares false); branch, parallel fan-out with a join that runs exactly
+once (arrivals counted in the join's row), delay (a job due later), approval (approve or reject with
+`MANAGE_ORGANIZATION`, optional timeout to `rejected` or failure), end, `onError` after the queue's retries
+(`wasichai.integrations.workflows.step-max-attempts`, default 5), cancel. Triggers: integration events (an
+`IntegrationEventListener`, once per event), schedules (cluster-locked `WorkflowScheduler`, a firing claimed once),
+a per-workflow webhook url with a hashed secret and `Idempotency-Key`, manual runs. A `paused` flag stops new runs.
+The validator now refuses a step shared by two parallel branches on the way to their join. Migration
+`V2__workflow_executions` (executions, step executions, `paused`, `webhook_token_hash`, `last_fired_at`). Metrics
+`integrations.workflows.executions` and `integrations.workflows.steps`; steps run with the run's correlation id.
+REST change (additive): `/workflows/{id}/run|pause|resume|webhook|executions`,
+`/workflows/executions/{id}` (+ `/cancel`, `/steps/{step}/approve|reject`), public
+`/webhooks/workflows/{id}/{secret}`; `WorkflowView.paused`. New tests: `ConditionEvaluationTest`, `FlowTest`,
+`WorkflowSchedulesTest`, `WorkflowExecutionTest`; `WorkflowValidatorTest` and the auto-configuration test extended.
+
 ## 2026-11-05 — Salesforce Change Data Capture via Pub/Sub
 
 New module `integrations-connector-salesforce-pubsub` ([#14](https://github.com/wasichai/integrations/issues/14)):

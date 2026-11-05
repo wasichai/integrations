@@ -36,7 +36,7 @@ The token needs `read:packages`. What each artifact brings:
 |---|---|
 | `wasichai-spring-boot-starter-integrations` | the Wasichai starter plus `wasichai-integrations` (connections, OAuth, webhooks, events, jobs, health) |
 | `wasichai-spring-boot-starter-integrations-sync` | the above plus `wasichai-integrations-sync` (definitions, engine, scheduler, conflicts) |
-| `wasichai-spring-boot-starter-integrations-workflows` | the integrations starter plus `wasichai-integrations-workflows` (definitions, versions, validation; nothing runs yet) |
+| `wasichai-spring-boot-starter-integrations-workflows` | the integrations starter plus `wasichai-integrations-workflows` (definitions, versions, validation, execution, triggers, approvals) |
 | `wasichai-integrations`, `wasichai-integrations-sync`, `wasichai-integrations-workflows` | the modules alone, for an app that assembles Wasichai itself |
 | `integrations-connector-notion`, `-salesforce`, `-jira`, `-github`, `-slack` | the shipped connectors (no Spring) |
 | `integrations-connector-salesforce-pubsub` | the Salesforce connector with Change Data Capture over the Pub/Sub API (brings gRPC, protobuf, Avro) |
@@ -142,6 +142,9 @@ OAuth providers usually require it.
 | Property | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | `false` turns the workflows module off; its routes answer `404` |
+| `step-max-attempts` | `5` | attempts of one step on the job queue (with its backoff) before it fails, 1–20 |
+| `scheduler-enabled` | `true` | fire schedule triggers |
+| `scheduler-tick` | `15s` | how often the scheduler looks for due schedules; must be positive. A firing starts at most a tick late |
 
 A minimal `application.yml`:
 
@@ -245,6 +248,9 @@ All replicas share the PostgreSQL job queue (`integration_jobs`):
   the lease, or another worker may start it again (handlers are idempotent, but the work is repeated).
 - The sync scheduler may run on every replica: each tick takes a cluster lock, so one replica enqueues per tick, and a
   definition has at most one queued or running run. It only enqueues; workers execute.
+- The workflow scheduler likewise: one replica per tick (cluster lock), and a firing is claimed once in the database,
+  so a schedule never fires twice. Workflow steps are jobs like any other: a step running when its replica dies runs
+  again after `jobs.lease`; finished steps are never repeated ([ADR-0025](../adr/0025-workflow-execution.md)).
 - Rate limits are kept in memory per replica: n replicas may together reach n times a connector's declared rate. A
   provider's `429` still slows every replica through retries.
 - Provider calls are made with the app's own HTTP client; outbound access to the providers' hosts (and DNS) must be

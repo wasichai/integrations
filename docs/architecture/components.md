@@ -48,7 +48,7 @@ writes round-trip, error responses map to the right `ConnectorError`.
 ## wasichai-integrations-workflows
 
 Integration workflows ([ADR-0022](../adr/0022-integration-workflows.md)): definitions, immutable versions and
-validation. Nothing executes yet ([#42](https://github.com/wasichai/integrations/issues/42)).
+validation; execution on the integrations job queue ([ADR-0025](../adr/0025-workflow-execution.md)).
 
 | Component | Responsibility |
 |---|---|
@@ -57,6 +57,12 @@ validation. Nothing executes yet ([#42](https://github.com/wasichai/integrations
 | `WorkflowValidator` | shape, edges, reachability, no cycles, references upstream, tenant connections, manifests, resource schemas |
 | `WorkflowService` / `WorkflowController` | drafts with optimistic locking, validate, publish to the next version, version reads |
 | `WorkflowRepository` | definitions, versions, the published trigger; `ConnectionUsage` for connections a workflow uses |
+| `WorkflowEngine` | the `integrations.workflow.step` job: runs a step, records it and moves on in one transaction; starts, approvals, cancel |
+| `Flow` / `RunContext` / `Conditions` | where a run goes next (parallel frames, join arrivals); ref resolution; condition evaluation |
+| `ExecutionRepository` | runs, step rows, join arrivals, live triggers, schedule firings |
+| `WorkflowEventTrigger` | `IntegrationEventListener`: an event starts the matching published workflows |
+| `WorkflowScheduler` | cluster-locked tick that fires schedule triggers once |
+| `WorkflowRunService` / `WorkflowWebhookController` | manual run, pause, history, approvals, cancel; the workflow's public webhook url |
 
 ## Connectors
 

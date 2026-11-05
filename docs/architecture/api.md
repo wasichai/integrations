@@ -8,16 +8,16 @@ otherwise they answer `404` to an authenticated caller, as in
 
 ## Conventions (inherited from Wasichai)
 
-- Base `/api/integrations`; Bearer JWT on every route except the two public ones (OAuth callback, inbound webhooks), which
-  run on their own security chain (`IntegrationsSecurityConfiguration`).
+- Base `/api/integrations`; Bearer JWT on every route except the public ones (OAuth callback, inbound webhooks,
+  workflow webhooks), which run on their own security chain (`IntegrationsSecurityConfiguration`).
 - Tenant from the token. An id that belongs to another tenant answers `404`, exactly like an id that does not exist.
 - Errors: RFC 7807 `application/problem+json` `{type, title, status, detail, errors?: [{field, message}]}`; `errors` is
   present only with field violations. `400` invalid input (field violations, malformed `If-Match`, unknown enum value,
   bad cursor), `401` no or bad token, `403` missing permission, `404` unknown or another tenant's, `409` state conflict,
   `412` stale or missing `If-Match`, `422` well-formed but refused (a definition that does not validate).
 - `X-Correlation-Id`: Wasichai's filter accepts one from the caller or makes one, and echoes it on every response.
-- Lists are plain JSON arrays, newest or alphabetical first, with an optional `limit` where noted. Only `/events` pages,
-  with a keyset cursor (`{content, nextCursor}`).
+- Lists are plain JSON arrays, newest or alphabetical first, with an optional `limit` where noted. Only `/events` and
+  `/workflows/{id}/executions` page, with a keyset cursor (`{content, nextCursor}`).
 - Versioned resources (provider configs, sync definitions, workflows) answer `ETag: "<version>"`; their `PUT` needs
   `If-Match: "<version>"` (`W/` and quotes are tolerated).
 - Permission column: **R** reader = any authenticated member of the tenant; **M** manager = `MANAGE_ORGANIZATION`
@@ -374,9 +374,8 @@ exists; `409` already resolved (or resolved meanwhile), a record gone or changed
 ## Workflows
 
 Module `wasichai-integrations-workflows` ([ADR-0022](../adr/0022-integration-workflows.md)). A workflow is a draft
-graph that is validated and published into immutable, numbered versions. **Published workflows do not run yet**:
-execution on the integrations job queue is [#42](https://github.com/wasichai/integrations/issues/42). Guide:
-[workflows](../guides/workflows.md).
+graph that is validated and published into immutable, numbered versions; the published version runs on the
+integrations job queue ([ADR-0025](../adr/0025-workflow-execution.md)). Guide: [workflows](../guides/workflows.md).
 
 | Method | Path | Perm | Answer |
 |---|---|---|---|
@@ -389,13 +388,23 @@ execution on the integrations job queue is [#42](https://github.com/wasichai/int
 | POST | `/workflows/{id}/publish` | M | `201` `WorkflowVersionView` of the next number; `If-Match` optional |
 | GET | `/workflows/{id}/versions` | R | `200` array of `{number, publishedAt, publishedBy}`, newest first |
 | GET | `/workflows/{id}/versions/{n}` | R | `200` `WorkflowVersionView`; `404` no such version |
+| POST | `/workflows/{id}/run` | M | `202` `ExecutionView`; body `{payload?}` (a JSON object, `400` otherwise); `409` not published or paused |
+| POST | `/workflows/{id}/pause` | M | `200` `WorkflowView` with `paused: true`: no trigger starts a run; running ones finish |
+| POST | `/workflows/{id}/resume` | M | `200` `WorkflowView` with `paused: false` |
+| POST | `/workflows/{id}/webhook` | M | `201` `{url, path}`: a new webhook url (the previous one stops working), shown once |
+| GET | `/workflows/{id}/executions` | R | `200` `{content: [ExecutionView], nextCursor}`, newest first; `status`, `cursor`, `limit` (1–200, default 50) |
+| GET | `/workflows/executions/{executionId}` | R | `200` `{execution: ExecutionView, steps: [StepExecutionView]}` |
+| POST | `/workflows/executions/{executionId}/cancel` | M | `200` detail, `CANCELLED`; `409` already over |
+| POST | `/workflows/executions/{executionId}/steps/{stepId}/approve` | M | `200` detail; body `{comment?}` (≤ 2000); `404` no such approval step; `409` not waiting or run over |
+| POST | `/workflows/executions/{executionId}/steps/{stepId}/reject` | M | as approve |
+| POST | `/webhooks/workflows/{id}/{secret}` | P | `202` `{executionId}`; see below |
 
 `WorkflowRequest`: `{name, graph}`. `name` 1–200 (trimmed). `graph` a JSON object of at most 256 KiB, absent means
 `{}`. Create and update check only that (`400`): a draft may be half built. `PUT` without `If-Match` or with a stale
 version is `412`.
 
-`WorkflowView`: `{id, name, status: DRAFT | PUBLISHED, graph, publishedVersion, unpublishedChanges, version, createdAt,
-updatedAt}`. `publishedVersion` is null until the first publish; `unpublishedChanges` is true while the draft differs
+`WorkflowView`: `{id, name, status: DRAFT | PUBLISHED, graph, publishedVersion, unpublishedChanges, paused, version,
+createdAt, updatedAt}`. Pausing does not change `version`. `publishedVersion` is null until the first publish; `unpublishedChanges` is true while the draft differs
 from that version (compared as JSON, so key order does not count). Publishing bumps `version`.
 
 `WorkflowVersionView`: `{workflowId, number, graph, publishedAt, publishedBy}`. A version never changes, and the
@@ -404,6 +413,41 @@ database refuses an update of one.
 `publish` validates the draft (as `validate`) and answers `422` with the violations when it does not; `409` when the
 draft is already the published version; `412` when `If-Match` is stale or the draft changed while it was validated.
 It stores the draft as version `publishedVersion + 1` and replaces the workflow's trigger row in one transaction.
+
+### Executions
+
+A run starts from the published version's trigger (or `run`) and stays pinned to that version. Executions and their
+steps are the tenant's: another tenant's are `404`.
+
+`ExecutionView`: `{id, workflowId, version, status, triggerType: event | webhook | schedule | manual, trigger,
+correlationId, startedBy, error, createdAt, startedAt, finishedAt}`. `status` is `QUEUED`, `RUNNING`, `WAITING` (a
+step waits: a delay or an approval; with parallel branches the latest change wins), `SUCCEEDED`, `FAILED` (`error`
+names the step) or `CANCELLED`. `trigger` is what `trigger.…` refs read: `{type, payload}` plus, for events,
+`eventId, connectionId, eventType, resourceType, resourceId, occurredAt` and, for schedules, `firedAt`. The event's
+`payload` is the provider's body as received; a manual run's or a webhook's is the JSON sent.
+
+`StepExecutionView`: `{stepId, type, status, attempt, input, output, error, waitUntil, decidedBy, createdAt, startedAt,
+finishedAt}`, in the order the run reached them. `status` is `PENDING`, `RUNNING`, `WAITING`, `SUCCEEDED`, `FAILED`
+or `SKIPPED` (the run ended first). Outputs: an action's is the connector's answer; a write's `{id, version, created,
+modifiedAt}` (`{id, deleted}` for a delete); a condition's or branch's `{result}`; an approval's `{approved, decidedBy,
+decidedAt, comment?}` or `{approved: false, timedOut: true}`. A step not reached has no row.
+
+Semantics ([ADR-0025](../adr/0025-workflow-execution.md)): a finished step never runs again; a step's provider call is
+at least once (a `create` or an action retried after a lost answer may repeat; `upsert` does not). A failure the queue
+may retry is retried with its backoff up to `step-max-attempts`; then `onError`, else the run fails. A join runs once,
+after every branch arrived. `end`, or a `condition` that does not hold, ends the run `SUCCEEDED`. Rejecting without a
+`rejected` edge ends the run `SUCCEEDED`; a timeout follows `rejected` or fails the step. Cancel ends the run: steps
+not yet run are `SKIPPED` and their jobs do nothing.
+
+Workflow webhook: `POST /api/integrations/webhooks/workflows/{id}/{secret}` needs no token (the secret authenticates;
+only its SHA-256 is stored). Body: JSON, at most `wasichai.integrations.webhooks.max-body-bytes` (`413`), empty means
+`{}`, not JSON is `400`. `Idempotency-Key` (≤ 200) starts one run per key: a repeat answers the same `executionId`.
+Unknown workflow, wrong secret or a trigger that is not `webhook`: `404`. Paused: `409`. `url` in the issue answer is
+null while `wasichai.integrations.public-base-url` is unset; `path` is always there.
+
+An event starts each published, unpaused workflow whose trigger names its connection and event type, once per event
+(a replay starts nothing new); the event is then `PROCESSED`. A schedule fires the latest due time once across
+replicas (missed firings collapse into one).
 
 ### Graph
 
@@ -425,7 +469,7 @@ It stores the draft as version `publishedVersion + 1` and replaces the workflow'
 | Trigger `type` | Keys |
 |---|---|
 | `event` | `connectionId`, `eventType` (one of the connector's declared webhook events) |
-| `webhook` | none yet (its url arrives with #42) |
+| `webhook` | none; the url comes from `POST /workflows/{id}/webhook` |
 | `schedule` | `cron` (Spring six fields, at most once a minute), `zone` (default `UTC`) |
 | `manual` | none |
 
@@ -456,6 +500,7 @@ deep. Values are literals (string, number, boolean, null).
 - edges: every edge (and `trigger.next`, `join`) names an existing step, ids are unique, every step is reachable from
   the trigger, no edge closes a cycle (no loops), each parallel branch reaches its join;
 - references: `steps.<id>` names an `action` or `approval` step upstream of the step reading it;
+- parallel: a step reachable from two branches of one parallel must not lead to its join (branches meet only there);
 - connections: each is the tenant's (another tenant's is "unknown connection") and its connector is installed; an event
   trigger's connector declares `WEBHOOKS` and the event type; an action's connector declares `ACTIONS` and the action;
   a write's connector declares `WRITE` (`UPSERT` for an upsert) and the resource (or discovers resources);

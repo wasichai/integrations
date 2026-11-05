@@ -21,6 +21,8 @@ data class WorkflowDefinition(
     val publishedVersion: Int?,
     // the draft equals the published version's graph
     val draftPublished: Boolean,
+    // starts no new run while set (ADR-0025)
+    val paused: Boolean,
     val version: Int,
     val createdAt: Instant,
     val updatedAt: Instant
@@ -40,6 +42,8 @@ data class WorkflowView(
     val publishedVersion: Int?,
     // the draft differs from the published version (always true for a never-published workflow)
     val unpublishedChanges: Boolean,
+    // no trigger starts a run while paused; runs already going finish
+    val paused: Boolean,
     val version: Int,
     val createdAt: Instant,
     val updatedAt: Instant
