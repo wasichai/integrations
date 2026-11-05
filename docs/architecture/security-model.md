@@ -30,10 +30,9 @@ Service accounts follow Wasichai's rules (never `ADMIN`).
   is re-sealed with the active key only when it is written again (connection credentials on a token refresh or a
   reconnect, a provider app's client secret on its next `PUT`); webhook signing secrets are never re-sealed. The old key
   is removed only when no row names it ([deployment guide](../guides/deployment.md#encryption-keys-and-rotation)).
-- Recovery: losing every key makes credentials unreadable by design. Today an unreadable secret surfaces as an
-  unexpected error on the call that needs it, not as `NEEDS_REAUTH`
-  ([#60](https://github.com/wasichai/integrations/issues/60)); the connection is reconnected (or the provider app or
-  webhook endpoint saved again). Back keys up with the database.
+- Recovery: losing every key makes credentials unreadable by design. Unreadable connection credentials mark the
+  connection `NEEDS_REAUTH`/`FAILING` with a "reconnect" message (ADR-0018); reconnecting fixes it. An unreadable
+  provider app or webhook endpoint secret is fixed by saving it again. Back keys up with the database.
 - Secrets are write-only over REST and never returned: views only say whether one is set (`clientSecretSet`,
   `secretSet`). Logs and metrics never include them; the platform does not log provider requests, headers or bodies.
 

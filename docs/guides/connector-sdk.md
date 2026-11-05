@@ -46,8 +46,9 @@ The platform runs the OAuth flows and stores the secrets; the connector only ans
 - `authorizationParameters()` adds query parameters to the authorize url (Notion adds `owner=user`).
 
 `Authenticator` is optional, but without it nothing checks the credentials against the provider: a connect stores them
-as given, "test connection" always succeeds, and the connection has no `providerAccountId`, so connecting the same
-account again adds a second connection. Implement it whenever the provider has a "who am I" call. Either way, the
+as given, "test connection" succeeds once they can be read back, and the connection has no `providerAccountId`, so connecting the same
+account again adds a second connection. The connection shows `accountChecked: false`, and so does a test of it.
+Implement it whenever the provider has a "who am I" call. Either way, the
 manifest lists the connector's `authMethods`.
 
 ### ResourceDiscovery

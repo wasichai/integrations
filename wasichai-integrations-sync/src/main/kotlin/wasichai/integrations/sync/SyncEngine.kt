@@ -686,16 +686,27 @@ class SyncEngine(
                     state.delete(link.id)
                     counts.updated++
                 }
-                definition.deletePolicy == DeletePolicy.FLAG -> {
+                definition.deletePolicy == DeletePolicy.IGNORE -> {
+                    state.setState(link.id, LinkState.ORPHANED, clock.instant())
+                    counts.skipped++
+                }
+                else -> {
+                    // FLAG, or PROPAGATE whose deletion may not flow to the other side: a person decides,
+                    // never a silent ORPHANED (issue #60)
+                    if (definition.deletePolicy == DeletePolicy.PROPAGATE) {
+                        log.warn(
+                            "integrations: sync {} record {} of {} was deleted but the direction does not write {}; DELETED conflict opened",
+                            definition.id,
+                            id,
+                            source,
+                            target
+                        )
+                    }
                     tx.run {
                         state.setState(link.id, LinkState.ORPHANED, clock.instant())
                         runs.openConflict(organizationId, definition.id, link.id, ConflictKind.DELETED, emptyList(), clock.instant())
                     }
                     counts.conflicts++
-                }
-                else -> {
-                    state.setState(link.id, LinkState.ORPHANED, clock.instant())
-                    counts.skipped++
                 }
             }
         }

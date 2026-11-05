@@ -69,8 +69,8 @@ Per definition `deletePolicy` (`SyncEngine`), when a linked record is deleted on
 - `FLAG` (the default): the link becomes `ORPHANED` and a `DELETED` conflict is opened for a person; resolving it
   unlinks the pair.
 - `PROPAGATE`: when the direction lets the deleted side flow, the other record is deleted through the connector (Notion
-  moves the page to the trash; already gone counts as done) and the link is removed. Against the direction it behaves
-  as `IGNORE`.
+  moves the page to the trash; already gone counts as done) and the link is removed. Against the direction it is
+  handled as `FLAG` (link `ORPHANED`, a `DELETED` conflict, a WARN log), never dropped (ADR-0018).
 - `IGNORE`: the link becomes `ORPHANED` and the other record stays; no conflict is opened.
 
 Deletes come from provider feeds where they exist (Salesforce `deleted`), from a read that finds the record gone

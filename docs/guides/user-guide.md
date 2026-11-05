@@ -53,7 +53,8 @@ connection instead of adding a second one, which is also how you repair a connec
 ## 4. Look at a connection
 
 **Connections** lists every connection with its status (Active, Needs reconnecting, Disabled, Error) and health (No
-data, Healthy, Degraded, Failing). **Test** calls the provider and updates both. **Delete** revokes access at the
+data, Healthy, Degraded, Failing). **Test** calls the provider and updates both; for a connector that cannot identify
+the account (`accountChecked: false`), it only checks that the stored credentials can still be read. **Delete** revokes access at the
 provider when it can, and is refused while a sync uses the connection: delete or change those syncs first.
 
 A connection's page has:

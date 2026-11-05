@@ -47,6 +47,9 @@ data class ConnectionView(
     val name: String,
     val providerAccountId: String?,
     val displayName: String?,
+    // false: the connector cannot ask the provider who the account is (no Authenticator), so the credentials were
+    // stored unchecked, a test only reads them back, and the same account can be connected twice
+    val accountChecked: Boolean,
     val status: ConnectionStatus,
     val authType: AuthType,
     val scopes: List<String>,
@@ -63,6 +66,8 @@ data class ConnectionTestView(
     val ok: Boolean,
     val error: String?,
     val retryable: Boolean?,
+    // whether the provider was asked; ok without it means only that the stored credentials could be read
+    val accountChecked: Boolean,
     val connection: ConnectionView
 )
 
@@ -246,10 +251,14 @@ class ConnectionService(
         val user = access.manager()
         val connection = find(user.organizationId, id)
         val now = clock.instant()
+        var asked = false
         return try {
+            // credentials no key opens fail here, even for a connector that cannot check its account
+            credentials.check(connection)
+            asked = registry.find(connection.connectorId) is Authenticator
             account(connection.connectorId, contexts.forConnection(connection))
             connections.markValidated(user.organizationId, id, now)
-            ConnectionTestView(true, null, null, view(find(user.organizationId, id)))
+            ConnectionTestView(true, null, null, asked, view(find(user.organizationId, id)))
         } catch (e: ConnectorException) {
             val status =
                 if (e is ConnectorException.AuthExpired) {
@@ -273,7 +282,7 @@ class ConnectionService(
                 describe(e),
                 now
             )
-            ConnectionTestView(false, describe(e), e.retryable, view(find(user.organizationId, id)))
+            ConnectionTestView(false, describe(e), e.retryable, asked, view(find(user.organizationId, id)))
         }
     }
 
@@ -437,6 +446,7 @@ class ConnectionService(
             c.name,
             c.providerAccountId,
             c.displayName,
+            registry.find(c.connectorId) is Authenticator,
             c.status,
             c.authType,
             c.scopes,

@@ -16,6 +16,9 @@ class IntegrationsTestApplication {
     fun testKeyConnector(): Connector = TestConnectors.apiKey()
 
     @Bean
+    fun testUncheckedConnector(): Connector = TestConnectors.unchecked()
+
+    @Bean
     fun stubOauthConnector(): Connector = StubProvider.oauth()
 
     @Bean

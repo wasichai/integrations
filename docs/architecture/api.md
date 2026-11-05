@@ -87,6 +87,10 @@ Request `ProviderConfigRequest`:
 `ProviderConfigView`: `{id, connectorId, clientId, clientSecretSet, scopes, options, version, createdAt, updatedAt}`; the
 secret is never answered.
 
+`options` are stored and answered as given, for the app's own use. Nothing in the platform reads them: they do not
+reach a connector (`ConnectorContext` carries the connection's `metadata`, not the provider config), and no built-in
+connector has a setting there.
+
 Errors: `400` violations (also `connectorId` "this connector does not use an oauth app"), `404` unknown connector, `412`
 replace without `If-Match` or with a stale version, `409` a concurrent create won.
 
@@ -108,12 +112,30 @@ provider's name (1–200 characters). `authType` is `API_KEY` (needs `apiKey`), 
 is refused here. The credentials are checked against the provider before anything is stored; a refusal is a `400` on
 field `credentials`. Connecting the same provider account again updates that connection in place.
 
-`ConnectionView`: `{id, connectorId, name, providerAccountId?, displayName?, status, authType, scopes, metadata, health,
-lastValidatedAt?, lastError?, version, createdAt, updatedAt}`; `status` `ACTIVE | NEEDS_REAUTH | DISABLED | ERROR`,
-`health` `UNKNOWN | HEALTHY | DEGRADED | FAILING`. Secrets never appear.
+`ConnectionView`: `{id, connectorId, name, providerAccountId?, displayName?, accountChecked, status, authType, scopes,
+metadata, health, lastValidatedAt?, lastError?, version, createdAt, updatedAt}`; `status` `ACTIVE | NEEDS_REAUTH |
+DISABLED | ERROR`, `health` `UNKNOWN | HEALTHY | DEGRADED | FAILING`. Secrets never appear.
 
-`ConnectionTestView`: `{ok, error?, retryable?, connection}`. A failure marks the connection: `AuthExpired` ⇒
+`accountChecked` (boolean) says whether the connector can ask the provider who the account is (it implements
+`Authenticator`). When `false` the credentials were stored without a check, `providerAccountId` is null, connecting the
+same account again adds a second connection, and a test only proves that the stored credentials can be read. It is
+also `false` when the connector is no longer installed.
+
+`ConnectionTestView`: `{ok, error?, retryable?, accountChecked, connection}`. `accountChecked` is `true` when the
+provider was asked for the account; `ok: true` with `accountChecked: false` means nothing was checked at the provider.
+The test first opens the stored credentials, for every connector. A failure marks the connection: `AuthExpired` ⇒
 `NEEDS_REAUTH`/`FAILING`, a retryable failure ⇒ `DEGRADED`, any other ⇒ `ERROR`/`FAILING`.
+
+Credentials that no configured key opens (sealed with a key removed since, or a damaged row) are an `AuthExpired` with
+the message `credentials cannot be decrypted with the configured keys; reconnect`, wherever they are needed: the
+connection becomes `NEEDS_REAUTH`/`FAILING` with that `lastError`; a test answers `200` with `ok: false`, `retryable:
+false`; discovery and other API calls on the connection answer `409` ("The connection needs a new authorization"); a
+sync run fails as `permanent` and its job is not retried. Connecting the same account again replaces them; a
+connection with `accountChecked: false` has to be deleted and connected anew.
+
+A connection's status and health change only through a test, a token refresh (refused ⇒ `NEEDS_REAUTH`/`FAILING`),
+unreadable credentials and connecting the account again. A failed sync run or job does not change them: its error is
+on the run and the definition's status.
 
 `DELETE` answers `409` naming what still uses the connection (each sync definition, in any status, with a side on
 it); nothing is revoked or deleted then, so no link, run or open conflict disappears with it. Otherwise it revokes the
@@ -304,8 +326,8 @@ are set for an `ACTIVE` definition with a schedule (now, when it never ran).
 
 `ConflictView`: `{id, definitionId, linkId?, kind, fields, status, resolution?, detectedAt, resolvedAt?}`. `kind`
 `FIELDS` (both sides changed a field and no rule decided), `DELETED` (a linked record was deleted under policy
-`FLAG`; `fields` is empty) or `ORPHANED_CREATE` (a create was interrupted and cannot be recovered without an
-`externalIdField`; `fields` is empty). `fields`: `[{key, aField, bField, a, b, base?: {a, b}}]`, values typed as `{"t": "text", "v":
+`FLAG`, or under `PROPAGATE` when the direction does not write the other side; `fields` is empty) or
+`ORPHANED_CREATE` (a create was interrupted and cannot be recovered without an `externalIdField`; `fields` is empty). `fields`: `[{key, aField, bField, a, b, base?: {a, b}}]`, values typed as `{"t": "text", "v":
 "…"}` (`t` one of `null`, `text`, `number`, `bool`, `date`, `datetime`, `choice`, `multi`, `ref` with `r`, `json`).
 `linkId` is null once the pair is forgotten.
 

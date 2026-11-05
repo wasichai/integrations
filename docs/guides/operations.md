@@ -32,10 +32,15 @@ A connection's status and health change in two places:
 | the test fails with another retryable error | unchanged | `DEGRADED` |
 | the test fails with a non-retryable error | `ERROR` | `FAILING` |
 | the provider refuses to refresh an OAuth token (any call) | `NEEDS_REAUTH` | `FAILING` |
+| no configured key opens the stored credentials (any call, or the test) | `NEEDS_REAUTH` | `FAILING` |
 | the account is connected again | `ACTIVE` | `HEALTHY` |
 
-A failing sync run does not change the connection's health: look at the definition's status as well
-([sync status](sync.md#status)).
+A failing sync run does not change the connection's health, by decision: health comes from tests, token refreshes and
+credentials, while a run can fail for reasons that are not the connection's (a mapping, one record). Look at the
+definition's status as well ([sync status](sync.md#status)).
+
+A connection with `accountChecked: false` (its connector has no `Authenticator`) is never checked at the provider: a
+successful test only means its credentials could be read back.
 
 ## Jobs
 
@@ -123,6 +128,10 @@ Useful alerts: `integrations.jobs{outcome="dead"}` increasing; `integrations.syn
 
 - **Connection `NEEDS_REAUTH`** (health `failing`, `lastError`): the refresh was refused or the token revoked. Connect
   the same account again (it updates in place), then retry the dead jobs.
+- **`lastError` "credentials cannot be decrypted with the configured keys; reconnect"** (log `credentials of
+  connection ... cannot be opened`): the key they were sealed with was removed, or the row was damaged. Put the key
+  back if it still exists; otherwise connect the account again (a connection with `accountChecked: false` is deleted
+  and connected anew).
 - **Run `FAILED` with `errorKind: permanent`** (definition status `lastError`, runs): the connection needs
   reauthorization, a connection or connector is gone, or the definition is no longer `ACTIVE`. Fix it, then run again.
 - **Run `FAILED` with `errorKind: transient`** (runs, jobs): the provider is down, slow or rate limiting. The job retries

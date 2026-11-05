@@ -224,6 +224,52 @@ class ConnectionApiTest : IntegrationsIntegrationTest() {
     }
 
     @Test
+    fun `credentials no configured key opens put the connection in NEEDS_REAUTH instead of failing`() {
+        val (id, _) = connect()
+        // as if sealed with a key that was removed since: the format is intact, the key is not configured
+        val parts = sealedCredentials(id).split(".")
+        runBlocking {
+            db
+                .sql("UPDATE ${schemas.metadata}.integration_connection_credentials SET sealed = :sealed WHERE connection_id = :id")
+                .bind("sealed", listOf(parts[0], "removed-key", parts[2], parts[3]).joinToString("."))
+                .bind("id", id)
+                .fetch()
+                .rowsUpdated()
+                .awaitSingle()
+        }
+        val tested = call(client, HttpMethod.POST, "/api/integrations/connections/$id/test", tenant.admin, null, 200)
+        assertFalse(tested.get("ok").asBoolean(), tested.toString())
+        assertFalse(tested.get("retryable").asBoolean())
+        val connection = tested.get("connection")
+        assertEquals("NEEDS_REAUTH", connection.get("status").asString())
+        assertEquals("FAILING", connection.get("health").asString())
+        assertTrue(connection.get("lastError").asString().contains("cannot be decrypted with the configured keys"), connection.toString())
+        assertFalse(tested.toString().contains("removed-key"), "the key id stays in the log")
+    }
+
+    @Test
+    fun `a connector that cannot check its account says so, and a test only reads the credentials back`() {
+        val body = mapOf("connectorId" to "test-unchecked", "authType" to "API_KEY", "apiKey" to "unchecked-key", "name" to "Unchecked")
+        val created = call(client, HttpMethod.POST, "/api/integrations/connections", tenant.admin, body, 201)
+        assertFalse(created.get("accountChecked").asBoolean(), created.toString())
+        assertTrue(created.path("providerAccountId").isMissingNode || created.path("providerAccountId").isNull)
+        // nothing identifies the account: the same key connected again is a second connection
+        val again = call(client, HttpMethod.POST, "/api/integrations/connections", tenant.admin, body, 201)
+        assertTrue(created.get("id").asString() != again.get("id").asString())
+        val id = created.get("id").asString()
+        val tested = call(client, HttpMethod.POST, "/api/integrations/connections/$id/test", tenant.admin, null, 200)
+        assertTrue(tested.get("ok").asBoolean(), tested.toString())
+        assertFalse(tested.get("accountChecked").asBoolean())
+        assertFalse(tested.get("connection").get("accountChecked").asBoolean())
+
+        val (checked, _) = connect()
+        val viaProvider = call(client, HttpMethod.POST, "/api/integrations/connections/$checked/test", tenant.admin, null, 200)
+        assertTrue(viaProvider.get("ok").asBoolean(), viaProvider.toString())
+        assertTrue(viaProvider.get("accountChecked").asBoolean())
+        assertTrue(call(client, HttpMethod.GET, "/api/integrations/connections/$checked", tenant.admin, null, 200).get("accountChecked").asBoolean())
+    }
+
+    @Test
     fun `api key connections are checked against the provider before they are stored`() {
         val created =
             call(

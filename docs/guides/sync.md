@@ -145,7 +145,7 @@ feeds; it does not trust the event payload.
 | `kind` | When | `fields` |
 |---|---|---|
 | `FIELDS` | a field changed on both sides and no owner or strategy decided, or a write kept losing the race | one entry per contested mapping |
-| `DELETED` | a linked record was deleted under `deletePolicy: FLAG` | empty |
+| `DELETED` | a linked record was deleted under `deletePolicy: FLAG`, or under `PROPAGATE` against the direction | empty |
 | `ORPHANED_CREATE` | a create was cut short and cannot be found again (no `externalIdField`, or the recovery was refused) | empty |
 
 While a conflict is open, the pair's link is `CONFLICT` (or `ORPHANED`) and nothing is written for it. `GET /conflicts`
@@ -205,8 +205,12 @@ answers `null` (Notion's trashed pages), or from reconciliation. What happens de
 | Policy | Effect |
 |---|---|
 | `FLAG` (default) | the link becomes `ORPHANED` and a `DELETED` conflict is opened for a person |
-| `PROPAGATE` | the other record is deleted (Notion: to the trash) and the link removed, when the deleted side may flow; else the link becomes `ORPHANED` |
+| `PROPAGATE` | the other record is deleted (Notion: to the trash) and the link removed, when the deleted side may flow; else as `FLAG`, with a warning in the log |
 | `IGNORE` | the link becomes `ORPHANED`; the other record stays |
+
+A `PROPAGATE` deletion that may not flow (in an `A_TO_B` definition, a record deleted in B) is not dropped: the user
+asked for deletions to travel and this one cannot, so a person decides, exactly as under `FLAG`. Resolving the
+`DELETED` conflict unlinks the pair; the surviving record is created again on the next change or reconcile.
 
 ## Reconciliation
 
@@ -255,5 +259,4 @@ reconnecting). `GET /sync-definitions/{id}/runs` lists them newest first with co
 | `nextScheduledAt`, `nextReconcileAt` | for an `ACTIVE` definition with a schedule |
 | `queuedOrRunning` | whether a run is waiting or running |
 
-`ORPHANED` links that are not tied to an open conflict (policy `IGNORE`, or `PROPAGATE` against the direction) are
-visible only in these counts.
+`ORPHANED` links that are not tied to an open conflict (policy `IGNORE`) are visible only in these counts.
