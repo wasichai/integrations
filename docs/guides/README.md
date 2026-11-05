@@ -11,5 +11,5 @@ How to use, extend and run Wasichai Integrations. The guides describe the code a
 | [Synchronization](sync.md) | whoever designs sync definitions: mappings, transforms, owners, conflicts, creates, deletes, schedules |
 | [Workflows](workflows.md) | whoever designs integration workflows: graph JSON, steps, conditions, validation, versions |
 | [AI tools](ai-tools.md) | tenant administrators exposing connector actions and records to agents: schemas, roles, approvals, audit |
-| [Deployment](deployment.md) | whoever installs it in an app: dependencies, every property, keys, OAuth, webhooks, scaling |
+| [Deployment](deployment.md) | whoever installs it in an app or runs the example image: dependencies, every property, keys, OAuth, webhooks, the container image and Compose, roles, scaling |
 | [Operations](operations.md) | whoever runs it: health, jobs, events, rate limits, metrics, diagnosis, logs |

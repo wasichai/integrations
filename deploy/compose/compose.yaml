@@ -1,0 +1,72 @@
+# the example app with PostgreSQL 18: one image, two roles (ADR-0028). from this folder:
+#   cp .env.example .env                  # then fill in the secrets (see the comments there)
+#   export WASICHAI_PACKAGES_TOKEN=...    # read:packages, only to build the image
+#   docker compose build && docker compose up -d
+# docs/guides/deployment.md explains every variable, the roles and scaling.
+name: wasichai-integrations
+
+# what api and worker share: the same image, the same .env, started once the database is healthy
+x-app: &app
+  image: ${INTEGRATIONS_IMAGE:-wasichai-integrations-app:local}
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  # above spring.lifecycle.timeout-per-shutdown-phase (30s): in-flight requests finish before a SIGKILL
+  stop_grace_period: 40s
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${WASICHAI_DB_NAME:-wasichai}
+      POSTGRES_USER: ${WASICHAI_DB_USERNAME:-wasichai}
+      POSTGRES_PASSWORD: ${WASICHAI_DB_PASSWORD:?set WASICHAI_DB_PASSWORD in .env}
+    # postgres 18 images keep their data under /var/lib/postgresql/18/docker: mount the parent
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # the REST api, webhooks and the oauth callback; no background work. the only service with a published port
+  api:
+    <<: *app
+    build:
+      context: ../..
+      dockerfile: integrations-app/Dockerfile
+      secrets:
+        - packages_token
+    environment:
+      SPRING_PROFILES_ACTIVE: api
+      WASICHAI_DB_HOST: postgres
+      WASICHAI_DB_PORT: "5432"
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  # the job queue and the sync and workflow schedulers, from the image the api service builds.
+  # more of them: docker compose up -d --scale worker=2
+  worker:
+    <<: *app
+    # after the api is healthy: a first start runs the migrations once, not in two replicas at the same time
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: worker
+      WASICHAI_DB_HOST: postgres
+      WASICHAI_DB_PORT: "5432"
+
+# read only while building, from the environment of `docker compose build`; never part of the image
+secrets:
+  packages_token:
+    environment: WASICHAI_PACKAGES_TOKEN
+
+volumes:
+  pgdata:

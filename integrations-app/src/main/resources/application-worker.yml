@@ -1,0 +1,11 @@
+# role "worker" (SPRING_PROFILES_ACTIVE=worker): runs the job queue and the sync and workflow schedulers. it still
+# answers http (health, and the api if routed to), but a load balancer sends traffic to the "api" replicas only.
+# these are the modules' defaults, written out so the role reads in one place (ADR-0028)
+wasichai:
+  integrations:
+    jobs:
+      worker-enabled: true
+    sync:
+      scheduler-enabled: true
+    workflows:
+      scheduler-enabled: true

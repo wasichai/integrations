@@ -86,3 +86,5 @@ ktlint-gradle-plugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", versio
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobufPlugin" }
+# the example app's executable jar (integrations-app, ADR-0028); same line as the boot bom
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }

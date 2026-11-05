@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # what `./gradlew publish` would upload, checked before it does: publish to a throwaway local
 # repository first, then compare the artifact ids with the list below. a new module fails here
-# until someone adds it on purpose; the end-to-end suite leaking in fails here too.
+# until someone adds it on purpose; the end-to-end suite or the example app (integrations-app) leaking in
+# fails here too.
 # usage: check-maven-publications.sh <local-repo-dir>   (the dir given to -Dmaven.repo.local)
 set -euo pipefail
 

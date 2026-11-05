@@ -14,6 +14,21 @@ Status: under construction. See [docs/product/](docs/product/) and the issues fo
   [deployment](docs/guides/deployment.md), [operations](docs/guides/operations.md).
 - Everything else (architecture, REST API, ADRs, product): [docs/README.md](docs/README.md).
 
+## Quick start (Docker)
+
+Run the example app (every module, the shipped connectors) with PostgreSQL 18, as an `api` and a `worker` container:
+
+```bash
+cd deploy/compose
+cp .env.example .env                 # fill in every replace-me: openssl rand -base64 48 / -base64 32 / -hex 24
+export WASICHAI_PACKAGES_TOKEN=...   # read:packages, to build the image
+docker compose build && docker compose up -d
+curl -s localhost:8080/actuator/health
+```
+
+Set `WASICHAI_SEED_DEV=true` in `.env` for a local trial to sign in as `admin@wasichai.local` / `admin`; never on a
+reachable host. Variables, roles and scaling: [deployment guide](docs/guides/deployment.md#the-example-app-and-its-container-image).
+
 ## Build
 
 ```bash
