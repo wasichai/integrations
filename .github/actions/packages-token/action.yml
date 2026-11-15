@@ -6,7 +6,7 @@ description: >
   Con `export: 'true'` (por defecto) lo deja en el entorno de los pasos siguientes, como NODE_AUTH_TOKEN (lo lee el
   .npmrc de setup-node) y WASICHAI_PACKAGES_TOKEN (lo lee settings.gradle.kts); va antes de setup-node, que con
   `cache: yarn` ya corre yarn. Con `export: 'false'` no lo deja en el entorno de nadie: solo en la salida `token`, para
-  pasarlo explícitamente al paso que lo necesita (`env: NODE_AUTH_TOKEN: ${{ steps.<id>.outputs.token }}`). Úsalo así
+  pasarlo explícitamente al paso que lo necesita (en el env del paso: NODE_AUTH_TOKEN igual a la salida token del paso con su id). Úsalo así
   cuando los demás pasos ejecutan código del pull request.
 
 inputs:
