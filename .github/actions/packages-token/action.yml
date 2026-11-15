@@ -1,0 +1,48 @@
+# Llega por sync desde wasichai/wasichai-sync (files/actions/packages-token): se cambia allá, no aquí.
+name: PACKAGES_TOKEN de Infisical
+description: >
+  Pide PACKAGES_TOKEN (read:packages, para leer los paquetes de GitHub Packages de wasichai) a Infisical por OIDC, con
+  la identidad gha-packages: ningún secreto vive en el repo. El job necesita `permissions: id-token: write`.
+  Con `export: 'true'` (por defecto) lo deja en el entorno de los pasos siguientes, como NODE_AUTH_TOKEN (lo lee el
+  .npmrc de setup-node) y WASICHAI_PACKAGES_TOKEN (lo lee settings.gradle.kts); va antes de setup-node, que con
+  `cache: yarn` ya corre yarn. Con `export: 'false'` no lo deja en el entorno de nadie: solo en la salida `token`, para
+  pasarlo explícitamente al paso que lo necesita (`env: NODE_AUTH_TOKEN: ${{ steps.<id>.outputs.token }}`). Úsalo así
+  cuando los demás pasos ejecutan código del pull request.
+
+inputs:
+  export:
+    description: "'true': al entorno de los pasos siguientes. 'false': solo a la salida token"
+    default: 'true'
+
+outputs:
+  token:
+    description: PACKAGES_TOKEN, enmascarado en el log
+    value: ${{ steps.token.outputs.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
+      with:
+        method: oidc
+        identity-id: 6e8efbaf-e98c-4308-a0ce-e69375f05e27
+        domain: https://eu.infisical.com
+        project-slug: wasichai-packages-v4-up
+        env-slug: prod
+        secret-name: PACKAGES_TOKEN
+    # secrets-action ya lo registró como secreto: queda enmascarado con cualquier nombre. también lo dejó en el
+    # entorno como PACKAGES_TOKEN; con export 'false' se vacía, para que ningún paso siguiente lo vea
+    - id: token
+      shell: bash
+      env:
+        EXPORT: ${{ inputs.export }}
+      run: |
+        echo "token=$PACKAGES_TOKEN" >>"$GITHUB_OUTPUT"
+        if [ "$EXPORT" = true ]; then
+          {
+            echo "NODE_AUTH_TOKEN=$PACKAGES_TOKEN"
+            echo "WASICHAI_PACKAGES_TOKEN=$PACKAGES_TOKEN"
+          } >>"$GITHUB_ENV"
+        else
+          echo "PACKAGES_TOKEN=" >>"$GITHUB_ENV"
+        fi
