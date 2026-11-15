@@ -1,4 +1,4 @@
-# Llega por sync desde wasichai/wasichai-sync (files/workflows/release-please.yml): se cambia allá, no aquí.
+# Llega por sync desde wasichai/wasichai-sync (files/.github/workflows/release-please.yml): se cambia allá, no aquí.
 name: Release Please
 
 on:
