@@ -1,4 +1,4 @@
-# Llega por sync desde wasichai/wasichai-sync (files/actions/packages-token): se cambia allá, no aquí.
+# Llega por sync desde wasichai/wasichai-sync (files/.github/actions/packages-token): se cambia allá, no aquí.
 name: PACKAGES_TOKEN de Infisical
 description: >
   Pide PACKAGES_TOKEN (read:packages, para leer los paquetes de GitHub Packages de wasichai) a Infisical por OIDC, con
