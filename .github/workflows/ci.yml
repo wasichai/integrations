@@ -17,16 +17,21 @@ permissions:
 env:
   GITHUB_ACTOR: ${{ github.actor }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # organization secret: a token with read:packages. wins over GITHUB_TOKEN (settings.gradle.kts)
-  WASICHAI_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 
 jobs:
   build:
     name: Unit tests (ktlint + build)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # los paquetes de GitHub Packages de wasichai piden un token read:packages: packages-token lo pide a Infisical por OIDC, sin secretos en el repo
+      # antes de setup-node, que con cache: yarn ya corre yarn
+      - uses: ./.github/actions/packages-token
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -45,8 +50,15 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # los paquetes de GitHub Packages de wasichai piden un token read:packages: packages-token lo pide a Infisical por OIDC, sin secretos en el repo
+      # antes de setup-node, que con cache: yarn ya corre yarn
+      - uses: ./.github/actions/packages-token
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -72,8 +84,15 @@ jobs:
     name: Publish dry run (Maven)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # los paquetes de GitHub Packages de wasichai piden un token read:packages: packages-token lo pide a Infisical por OIDC, sin secretos en el repo
+      # antes de setup-node, que con cache: yarn ya corre yarn
+      - uses: ./.github/actions/packages-token
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -89,13 +108,20 @@ jobs:
     name: Container image (build + smoke)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # los paquetes de GitHub Packages de wasichai piden un token read:packages: packages-token lo pide a Infisical por OIDC, sin secretos en el repo
+      # antes de setup-node, que con cache: yarn ya corre yarn
+      - uses: ./.github/actions/packages-token
       # the read:packages token reaches gradle inside the build as a BuildKit secret, never a build arg or a layer
       - name: Build the image
         env:
           DOCKER_BUILDKIT: '1'
-          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+          PACKAGES_TOKEN: ${{ env.WASICHAI_PACKAGES_TOKEN }}
         run: >-
           docker build --secret id=packages_token,env=PACKAGES_TOKEN
           -f integrations-app/Dockerfile -t wasichai-integrations-app:ci .
