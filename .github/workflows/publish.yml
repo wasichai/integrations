@@ -11,8 +11,6 @@ permissions:
 env:
   GITHUB_ACTOR: ${{ github.actor }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # reading the wasichai-* packages; wins over GITHUB_TOKEN (settings.gradle.kts)
-  WASICHAI_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 
 jobs:
   # the guard runs before the upload: a failed guard blocks it, so a release never publishes the wrong set
@@ -20,8 +18,15 @@ jobs:
     name: Release guard (Maven)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # los paquetes de GitHub Packages de wasichai piden un token read:packages: packages-token lo pide a Infisical por OIDC, sin secretos en el repo
+      # antes de setup-node, que con cache: yarn ya corre yarn
+      - uses: ./.github/actions/packages-token
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -37,8 +42,15 @@ jobs:
     needs: guards
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # los paquetes de GitHub Packages de wasichai piden un token read:packages: packages-token lo pide a Infisical por OIDC, sin secretos en el repo
+      # antes de setup-node, que con cache: yarn ya corre yarn
+      - uses: ./.github/actions/packages-token
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
