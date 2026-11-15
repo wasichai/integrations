@@ -1,21 +1,45 @@
+# Llega por sync desde wasichai/wasichai-sync (files/workflows/release-please.yml): se cambia allá, no aquí.
 name: Release Please
 
 on:
   push:
     branches: [main]
 
+# lo que escribe (el pull request de release, la etiqueta, la release) lo hace la App wasichai-bot, no este token
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  id-token: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # solo llama a la api de github: que un cuelgue no queme las 6 h por defecto
+    timeout-minutes: 10
     steps:
-      # one version for every maven module of this repo. merging its pr tags and creates the github release.
+      # la llave de la App vive en Infisical. gha-repos solo entrega un token a este workflow en main
+      - name: Llave de wasichai-bot
+        uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
+        with:
+          method: oidc
+          identity-id: 92abf63a-dfc5-41ab-b901-9119c7b0f759
+          domain: https://eu.infisical.com
+          project-slug: wasichai-repos-j-pz3
+          env-slug: prod
+          secret-name: WASICHAI_BOT_PRIVATE_KEY
+      # un token de la App solo para este repo y solo con lo que release-please usa. lo que crea con él sí dispara
+      # workflows (ci.yml, commits.yml, release.yml, publish.yml), a diferencia de lo que crea GITHUB_TOKEN
+      - name: Token de wasichai-bot
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: Iv23livS12qKqCtx3f3F
+          private-key: ${{ env.WASICHAI_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      # mantiene abierto un pull request de release; al mergearlo etiqueta vX.Y.Z y crea la release de github
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          # a release made with GITHUB_TOKEN does not trigger other workflows; a PAT lets publish.yml run
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.bot.outputs.token }}
